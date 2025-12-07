@@ -262,6 +262,7 @@ model Geofence {
 
   trackers       Tracker[]       @relation("TrackerGeofences")
   geofenceEvents GeofenceEvent[]
+  alerts         Alert[]
   user           User            @relation(fields: [userId], references: [id])
   userId         String
 }
