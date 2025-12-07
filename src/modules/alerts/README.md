@@ -68,9 +68,11 @@ Le module Alerts permet de créer, lister, filtrer et supprimer des alertes gén
 ## Fonctionnalités métier
 
 ### Validation stricte
-- `trackerId` obligatoire et doit exister
-- `positionId` obligatoire et doit exister  
+- `trackerId` obligatoire et doit exister (contrainte FK au niveau base de données)
+- `positionId` obligatoire et doit exister (contrainte FK au niveau base de données)
 - `type` doit être un type valide de l'enum
+
+> **Note :** L'intégrité référentielle pour `trackerId` et `positionId` est maintenant garantie par des contraintes de clé étrangère dans le schéma de base de données, en plus des vérifications dans la couche service.
 
 ### Prévention des doublons
 - Empêche la création d'alertes identiques dans une fenêtre de 2 minutes

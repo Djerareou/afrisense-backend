@@ -78,7 +78,14 @@ async function sendSMSViaCallMeBot(phoneNumber, message) {
     const result = await response.text();
     return { status: 'sent', response: result };
   } catch (err) {
-    logger.error({ err, phoneNumber: cleanPhone }, 'notifications:callmebot_error');
+    // Avoid logging PII (phone number) and sensitive error details (API key)
+    logger.error(
+      {
+        message: err && err.message ? err.message : 'Unknown error',
+        statusCode: err && err.statusCode ? err.statusCode : undefined
+      },
+      'notifications:callmebot_error'
+    );
     throw err;
   }
 }

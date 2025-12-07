@@ -221,15 +221,19 @@ DELETE /api/alerts/alert-uuid-123
 
 ### 5. Gérer les paramètres utilisateur
 
+> **Note :** Les endpoints de paramètres vérifient `req.user?.id` mais n'ont pas de middleware d'authentification appliqué au niveau des routes. Il est recommandé d'ajouter un middleware d'authentification (JWT) au niveau de l'application ou des routes pour sécuriser ces endpoints.
+
 **Obtenir les paramètres:**
 ```bash
 GET /api/alerts/settings
+# Authentication middleware should be added at app or route level
 Authorization: Bearer <token>
 ```
 
 **Mettre à jour les paramètres:**
 ```bash
 PATCH /api/alerts/settings
+# Authentication middleware should be added at app or route level
 Authorization: Bearer <token>
 Content-Type: application/json
 

@@ -124,7 +124,7 @@ export async function createAlert(payload) {
     type,
     positionId,
     geofenceId,
-    meta: meta ? JSON.stringify(meta) : null
+    meta: meta && Object.keys(meta).length > 0 ? JSON.stringify(meta) : null
   };
   
   const stored = await repo.createAlert(alertData);

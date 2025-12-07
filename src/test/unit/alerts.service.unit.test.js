@@ -90,5 +90,7 @@ describe('alerts.service', () => {
     
     const res = await alerts.createAlert(payload);
     expect(res).toBeNull();
+    // Verify that alert.create was NOT called when duplicate detected
+    expect(prismaModule.prisma.alert.create).not.toHaveBeenCalled();
   });
 });

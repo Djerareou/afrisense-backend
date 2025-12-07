@@ -84,7 +84,8 @@ export async function findRecentSimilarAlerts(criteria, since) {
     timestamp: { gte: since }
   };
   
-  if (criteria.geofenceId) {
+  // Include geofenceId in matching criteria, even if null, to properly detect duplicates
+  if (criteria.geofenceId !== undefined) {
     where.geofenceId = criteria.geofenceId;
   }
   

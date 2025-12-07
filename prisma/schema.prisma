@@ -119,6 +119,7 @@ model Position {
 
   tracker        Tracker         @relation(fields: [trackerId], references: [id])
   geofenceEvents GeofenceEvent[]
+  alerts         Alert[]
   // For PostGIS geometry (optional)
   // location Unsupported("geometry")
 
@@ -162,6 +163,7 @@ model Alert {
 
   // relations
   tracker      Tracker              @relation(fields: [trackerId], references: [id])
+  position     Position             @relation(fields: [positionId], references: [id])
   geofence     Geofence?            @relation(fields: [geofenceId], references: [id])
   deliveryLogs AlertDeliveryLog[]
 
