@@ -44,7 +44,7 @@ DROP COLUMN "title",
 DROP COLUMN "userId",
 ADD COLUMN     "geofenceId" TEXT,
 ADD COLUMN     "meta" JSONB,
-ADD COLUMN     "positionId" TEXT NOT NULL,
+ADD COLUMN     "positionId" TEXT,
 ADD COLUMN     "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 ALTER COLUMN "trackerId" SET NOT NULL;
 
