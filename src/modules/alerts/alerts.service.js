@@ -4,8 +4,8 @@ import logger from '../../utils/logger.js';
 import * as notifications from './notifications.js';
 import { prisma } from '../../config/prismaClient.js';
 
-// Duplicate prevention window (2 minutes)
-const DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
+// Duplicate prevention window (configurable via env, default 2 minutes)
+const DUPLICATE_WINDOW_MS = parseInt(process.env.ALERT_DUPLICATE_WINDOW_SECONDS || '120', 10) * 1000;
 
 /**
  * Send notification through a channel (non-blocking)
@@ -130,34 +130,37 @@ export async function createAlert(payload) {
   const stored = await repo.createAlert(alertData);
 
   // Send notifications asynchronously (non-blocking)
-  setImmediate(async () => {
-    try {
-      // Determine channels from settings or defaults
-      let channels = ['CONSOLE'];
-      if (settings && settings.channels) {
-        const channelConfig = typeof settings.channels === 'string' 
-          ? JSON.parse(settings.channels) 
-          : settings.channels;
-        
-        channels = Object.entries(channelConfig)
-          .filter(([_, enabled]) => enabled)
-          .map(([channel, _]) => channel.toUpperCase());
-      }
+  // Wrap in setImmediate with proper error handling to prevent unhandled rejections
+  setImmediate(() => {
+    (async () => {
+      try {
+        // Determine channels from settings or defaults
+        let channels = ['CONSOLE'];
+        if (settings && settings.channels) {
+          const channelConfig = typeof settings.channels === 'string' 
+            ? JSON.parse(settings.channels) 
+            : settings.channels;
+          
+          channels = Object.entries(channelConfig)
+            .filter(([_, enabled]) => enabled)
+            .map(([channel, _]) => channel.toUpperCase());
+        }
 
-      // Send to each enabled channel
-      for (const channel of channels) {
-        const result = await sendNotification(channel, stored, user);
-        await repo.createDeliveryLog({
-          alertId: stored.id,
-          channel,
-          status: result.status,
-          providerRef: result.providerRef || null,
-          error: result.error || null
-        });
+        // Send to each enabled channel
+        for (const channel of channels) {
+          const result = await sendNotification(channel, stored, user);
+          await repo.createDeliveryLog({
+            alertId: stored.id,
+            channel,
+            status: result.status,
+            providerRef: result.providerRef || null,
+            error: result.error || null
+          });
+        }
+      } catch (err) {
+        logger.error({ err, alertId: stored.id }, 'alerts:notification_dispatch_error');
       }
-    } catch (err) {
-      logger.error({ err, alertId: stored.id }, 'alerts:notification_dispatch_error');
-    }
+    })();
   });
 
   return stored;

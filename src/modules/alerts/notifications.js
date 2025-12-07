@@ -43,9 +43,10 @@ async function sendEmailViaResend(to, subject, body) {
 }
 
 /**
- * Send SMS via CallMeBot API
- * @param {string} phoneNumber - Phone number in international format
- * @param {string} message - SMS message
+ * Send WhatsApp message via CallMeBot API
+ * Note: CallMeBot primarily uses WhatsApp. For true SMS, consider integrating Twilio or similar.
+ * @param {string} phoneNumber - Phone number in international format (e.g., +237xxxxxxxxx)
+ * @param {string} message - Message text
  * @returns {Promise<Object>} Response from CallMeBot
  */
 async function sendSMSViaCallMeBot(phoneNumber, message) {
@@ -55,11 +56,17 @@ async function sendSMSViaCallMeBot(phoneNumber, message) {
     throw new Error('CALLMEBOT_API_KEY not configured');
   }
 
+  // Validate and sanitize phone number
+  const cleanPhone = phoneNumber.replace(/[^\d+]/g, '');
+  if (!cleanPhone.match(/^\+?\d{10,15}$/)) {
+    throw new Error('Invalid phone number format. Expected: +[country code][number]');
+  }
+
   try {
-    // CallMeBot API format: https://api.callmebot.com/whatsapp.php?phone=[phone]&text=[message]&apikey=[key]
-    // Note: CallMeBot uses WhatsApp API. Adjust URL based on service type.
+    // CallMeBot WhatsApp API endpoint
     const encodedMessage = encodeURIComponent(message);
-    const url = `https://api.callmebot.com/whatsapp.php?phone=${phoneNumber}&text=${encodedMessage}&apikey=${CALLMEBOT_API_KEY}`;
+    const encodedPhone = encodeURIComponent(cleanPhone);
+    const url = `https://api.callmebot.com/whatsapp.php?phone=${encodedPhone}&text=${encodedMessage}&apikey=${CALLMEBOT_API_KEY}`;
     
     const response = await fetch(url, { method: 'GET' });
 
@@ -71,7 +78,7 @@ async function sendSMSViaCallMeBot(phoneNumber, message) {
     const result = await response.text();
     return { status: 'sent', response: result };
   } catch (err) {
-    logger.error({ err, phoneNumber }, 'notifications:callmebot_error');
+    logger.error({ err, phoneNumber: cleanPhone }, 'notifications:callmebot_error');
     throw err;
   }
 }

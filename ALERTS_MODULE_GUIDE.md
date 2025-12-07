@@ -50,6 +50,9 @@ CALLMEBOT_API_KEY=xxxxxxxxxxxxx
 # Optionnel : destinataires par défaut pour les tests
 DEFAULT_ALERT_EMAIL=admin@votredomaine.com
 DEFAULT_ALERT_PHONE=+237xxxxxxxxx
+
+# Optionnel : fenêtre de prévention des doublons (en secondes, défaut: 120)
+ALERT_DUPLICATE_WINDOW_SECONDS=120
 ```
 
 #### Obtenir une clé API Resend
