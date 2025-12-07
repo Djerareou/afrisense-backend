@@ -1,58 +1,154 @@
 import * as service from './alerts.service.js';
+import logger from '../../utils/logger.js';
 
+/**
+ * Create a new alert (POST /alerts)
+ */
 export async function createAlertHandler(req, res) {
   const payload = req.body;
   try {
-    const userId = req.user?.id || payload.userId;
-    const result = await service.createAlert({ ...payload, userId });
-    if (!result) return res.status(204).send();
-    return res.status(201).json(result);
+    const result = await service.createAlert(payload);
+    if (!result) {
+      return res.status(204).json({ message: 'Alert skipped (duplicate or disabled)' });
+    }
+    return res.status(201).json({ success: true, data: result });
   } catch (err) {
-    return res.status(400).json({ error: String(err) });
+    logger.error({ err, payload }, 'alerts:create_error');
+    return res.status(400).json({ success: false, error: String(err) });
   }
 }
 
+/**
+ * List alerts with filtering (GET /alerts)
+ */
 export async function listAlertsHandler(req, res) {
-  const filter = { ...req.query };
-  const skip = parseInt(req.query.skip || '0', 10);
-  const take = parseInt(req.query.take || '50', 10);
   try {
-    filter.userId = req.user?.id || filter.userId;
+    const filter = {
+      type: req.query.type,
+      trackerId: req.query.trackerId,
+      geofenceId: req.query.geofenceId,
+      dateFrom: req.query.dateFrom,
+      dateTo: req.query.dateTo
+    };
+    
+    // Remove undefined values
+    Object.keys(filter).forEach(key => filter[key] === undefined && delete filter[key]);
+    
+    const skip = parseInt(req.query.skip || '0', 10);
+    const take = parseInt(req.query.take || '50', 10);
+    
     const items = await service.getAlerts(filter, { skip, take });
-    return res.json(items);
+    return res.json({ success: true, data: items, count: items.length });
   } catch (err) {
-    return res.status(400).json({ error: String(err) });
+    logger.error({ err }, 'alerts:list_error');
+    return res.status(400).json({ success: false, error: String(err) });
   }
 }
 
-export async function updateAlertStatusHandler(req, res) {
-  const id = req.params.id;
-  const { status } = req.body;
+/**
+ * Get a single alert by ID (GET /alerts/:id)
+ */
+export async function getAlertHandler(req, res) {
   try {
-    const userId = req.user?.id;
-    const updated = await service.updateAlertStatus(id, userId, status);
-    return res.json(updated);
+    const id = req.params.id;
+    const alert = await service.getAlertById(id);
+    return res.json({ success: true, data: alert });
   } catch (err) {
-    return res.status(400).json({ error: String(err) });
+    logger.error({ err, id: req.params.id }, 'alerts:get_error');
+    return res.status(404).json({ success: false, error: String(err) });
   }
 }
 
+/**
+ * Delete an alert (DELETE /alerts/:id)
+ */
+export async function deleteAlertHandler(req, res) {
+  try {
+    const id = req.params.id;
+    await service.deleteAlert(id);
+    return res.json({ success: true, message: 'Alert deleted' });
+  } catch (err) {
+    logger.error({ err, id: req.params.id }, 'alerts:delete_error');
+    return res.status(400).json({ success: false, error: String(err) });
+  }
+}
+
+/**
+ * Get alert settings for current user (GET /alerts/settings)
+ */
 export async function getSettingsHandler(req, res) {
   try {
     const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    
     const settings = await service.getAlertSettings(userId);
-    return res.json(settings);
+    return res.json({ success: true, data: settings });
   } catch (err) {
-    return res.status(400).json({ error: String(err) });
+    logger.error({ err }, 'alerts:get_settings_error');
+    return res.status(400).json({ success: false, error: String(err) });
   }
 }
 
+/**
+ * Update alert settings for current user (PATCH /alerts/settings)
+ */
 export async function updateSettingsHandler(req, res) {
   try {
     const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    
     const updated = await service.updateAlertSettings(userId, req.body);
-    return res.json(updated);
+    return res.json({ success: true, data: updated });
   } catch (err) {
-    return res.status(400).json({ error: String(err) });
+    logger.error({ err }, 'alerts:update_settings_error');
+    return res.status(400).json({ success: false, error: String(err) });
+  }
+}
+
+/**
+ * Test email notification (POST /alerts/test/email)
+ */
+export async function testEmailHandler(req, res) {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email is required' });
+    }
+    
+    const result = await service.testEmailNotification(email);
+    if (result.success) {
+      return res.json({ success: true, message: 'Test email sent', data: result.result });
+    } else {
+      return res.status(500).json({ success: false, error: result.error });
+    }
+  } catch (err) {
+    logger.error({ err }, 'alerts:test_email_error');
+    return res.status(500).json({ success: false, error: String(err) });
+  }
+}
+
+/**
+ * Test SMS notification (POST /alerts/test/sms)
+ */
+export async function testSMSHandler(req, res) {
+  try {
+    const { phoneNumber } = req.body;
+    if (!phoneNumber) {
+      return res.status(400).json({ success: false, error: 'Phone number is required' });
+    }
+    
+    const result = await service.testSMSNotification(phoneNumber);
+    if (result.success) {
+      return res.json({ success: true, message: 'Test SMS sent', data: result.result });
+    } else {
+      return res.status(500).json({ success: false, error: result.error });
+    }
+  } catch (err) {
+    logger.error({ err }, 'alerts:test_sms_error');
+    return res.status(500).json({ success: false, error: String(err) });
   }
 }

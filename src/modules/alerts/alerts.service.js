@@ -1,85 +1,257 @@
 import * as repo from './alerts.repository.js';
-import { AlertType, NotificationChannel } from './alerts.enums.js';
+import { AlertType } from './alerts.enums.js';
 import logger from '../../utils/logger.js';
 import * as notifications from './notifications.js';
+import { prisma } from '../../config/prismaClient.js';
 
-// Minimal notification sender (stub). Replace with real providers later.
-async function sendNotification(channel, alert, settings) {
+// Duplicate prevention window (2 minutes)
+const DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
+
+/**
+ * Send notification through a channel (non-blocking)
+ * @param {string} channel - Notification channel
+ * @param {Object} alert - Alert object
+ * @param {Object} user - User object with email/phone
+ * @returns {Promise<Object>} Send result
+ */
+async function sendNotification(channel, alert, user) {
   try {
-    if (channel === 'EMAIL') {
-      const to = settings?.email || process.env.DEFAULT_ALERT_EMAIL;
-      if (!to) throw new Error('No recipient for email');
-      const res = await notifications.send('EMAIL', to, `Alert: ${alert.type}`, JSON.stringify(alert.metadata || {}));
-      return { status: 'success', providerRef: JSON.stringify(res) };
+    const subject = `Alert: ${alert.type}`;
+    let body = `Alert detected for tracker ${alert.tracker?.label || alert.trackerId}.\n`;
+    body += `Type: ${alert.type}\n`;
+    body += `Time: ${alert.timestamp}\n`;
+    
+    if (alert.geofence) {
+      body += `Geofence: ${alert.geofence.name}\n`;
     }
-    // console fallback
-    const res = await notifications.send('CONSOLE', null, `Alert: ${alert.type}`, JSON.stringify(alert.metadata || {}));
-    return { status: 'success', providerRef: JSON.stringify(res) };
+    
+    if (alert.meta) {
+      body += `Details: ${JSON.stringify(alert.meta)}\n`;
+    }
+
+    let target = null;
+    if (channel === 'EMAIL') {
+      target = user?.email || process.env.DEFAULT_ALERT_EMAIL;
+    } else if (channel === 'SMS') {
+      target = user?.phone || process.env.DEFAULT_ALERT_PHONE;
+    }
+
+    if (!target && channel !== 'CONSOLE') {
+      throw new Error(`No ${channel} target configured`);
+    }
+
+    const result = await notifications.send(channel, target, subject, body);
+    return { status: 'success', providerRef: result?.id || JSON.stringify(result) };
   } catch (err) {
+    logger.error({ err, channel, alertId: alert.id }, 'alerts:notification_error');
     return { status: 'failure', error: String(err) };
   }
 }
 
+/**
+ * Check for duplicate alerts within time window
+ * @param {Object} criteria - Alert criteria
+ * @returns {Promise<boolean>} True if duplicate exists
+ */
+async function isDuplicate(criteria) {
+  const since = new Date(Date.now() - DUPLICATE_WINDOW_MS);
+  const recent = await repo.findRecentSimilarAlerts(criteria, since);
+  return recent.length > 0;
+}
+
+/**
+ * Get user from tracker
+ * @param {string} trackerId - Tracker ID
+ * @returns {Promise<Object>} User object
+ */
+async function getUserFromTracker(trackerId) {
+  const tracker = await prisma.tracker.findUnique({
+    where: { id: trackerId },
+    include: { user: true }
+  });
+  
+  if (!tracker) {
+    throw new Error('Tracker not found');
+  }
+  
+  return tracker.user;
+}
+
+/**
+ * Create a new alert
+ * @param {Object} payload - Alert data
+ * @returns {Promise<Object|null>} Created alert or null if skipped
+ */
 export async function createAlert(payload) {
+  const { trackerId, type, positionId, geofenceId = null, meta = {} } = payload;
+
   // Validation
-  const { userId, trackerId, type, severity, positionId, metadata = {} } = payload;
+  if (!trackerId) throw new Error('trackerId is required');
+  if (!type) throw new Error('type is required');
   if (!positionId) throw new Error('positionId is required');
+  if (!Object.values(AlertType).includes(type)) {
+    throw new Error(`Invalid alert type: ${type}`);
+  }
 
-  // Verify tracker ownership
-  const tracker = await import('../../config/prismaClient.js').then(m => m.prisma).then(p => p.tracker.findUnique({ where: { id: trackerId } }));
+  // Verify tracker exists
+  const tracker = await prisma.tracker.findUnique({ where: { id: trackerId } });
   if (!tracker) throw new Error('Tracker not found');
-  if (tracker.userId !== userId) throw new Error('ACCESS_DENIED');
 
-  // Verify type enabled in user settings
-  const settings = await repo.getAlertSettings(userId);
-  if (settings) {
-    // check types enabled - we store channels and thresholds; for simplicity assume enabled boolean
-    if (settings.enabled === false) {
-      logger.info({ userId, type }, 'alerts:disabled_for_user');
-      return null;
-    }
+  // Verify position exists
+  const position = await prisma.position.findUnique({ where: { id: positionId } });
+  if (!position) throw new Error('Position not found');
+
+  // Check for duplicates
+  const criteria = { trackerId, type, geofenceId };
+  if (await isDuplicate(criteria)) {
+    logger.info({ trackerId, type, geofenceId }, 'alerts:duplicate_skipped');
+    return null;
+  }
+
+  // Get user for notification settings
+  const user = await getUserFromTracker(trackerId);
+  const settings = await repo.getAlertSettings(user.id);
+
+  // Check if alerts are enabled for this user
+  if (settings && settings.enabled === false) {
+    logger.info({ userId: user.id, type }, 'alerts:disabled_for_user');
+    return null;
   }
 
   // Persist alert
-  const stored = await repo.createAlert({ userId, trackerId, type, severity, geofenceId: payload.geofenceId ?? null, positionId, metadata });
+  const alertData = {
+    trackerId,
+    type,
+    positionId,
+    geofenceId,
+    meta: meta ? JSON.stringify(meta) : null
+  };
+  
+  const stored = await repo.createAlert(alertData);
 
-  // Notify according to settings
-  const channels = (settings && settings.channels) ? JSON.parse(settings.channels) : null;
-  const preferred = channels || ['CONSOLE'];
+  // Send notifications asynchronously (non-blocking)
+  setImmediate(async () => {
+    try {
+      // Determine channels from settings or defaults
+      let channels = ['CONSOLE'];
+      if (settings && settings.channels) {
+        const channelConfig = typeof settings.channels === 'string' 
+          ? JSON.parse(settings.channels) 
+          : settings.channels;
+        
+        channels = Object.entries(channelConfig)
+          .filter(([_, enabled]) => enabled)
+          .map(([channel, _]) => channel.toUpperCase());
+      }
 
-  for (const ch of preferred) {
-    const channel = ch.toUpperCase();
-    const result = await sendNotification(channel, stored, settings);
-    const status = result.status === 'success' ? 'success' : 'failure';
-    await repo.createDeliveryLog({ alertId: stored.id, channel, status, providerRef: result.providerRef ?? null, error: result.error ?? null });
-  }
+      // Send to each enabled channel
+      for (const channel of channels) {
+        const result = await sendNotification(channel, stored, user);
+        await repo.createDeliveryLog({
+          alertId: stored.id,
+          channel,
+          status: result.status,
+          providerRef: result.providerRef || null,
+          error: result.error || null
+        });
+      }
+    } catch (err) {
+      logger.error({ err, alertId: stored.id }, 'alerts:notification_dispatch_error');
+    }
+  });
 
   return stored;
 }
 
+/**
+ * Get alerts with filtering
+ * @param {Object} filter - Filter criteria
+ * @param {Object} options - Pagination options
+ * @returns {Promise<Array>} List of alerts
+ */
 export async function getAlerts(filter = {}, options = {}) {
   return repo.findAlerts(filter, options);
 }
 
-export async function updateAlertStatus(id, userId, status) {
-  // verify ownership
-  const existing = await import('../../config/prismaClient.js').then(m => m.prisma).then(p => p.alert.findUnique({ where: { id } }));
-  if (!existing) throw new Error('Alert not found');
-  if (existing.userId !== userId) throw new Error('ACCESS_DENIED');
-  return repo.updateAlertStatus(id, status);
+/**
+ * Get a single alert by ID
+ * @param {string} id - Alert ID
+ * @returns {Promise<Object>} Alert object
+ */
+export async function getAlertById(id) {
+  const alert = await repo.findAlertById(id);
+  if (!alert) throw new Error('Alert not found');
+  return alert;
 }
 
+/**
+ * Delete an alert
+ * @param {string} id - Alert ID
+ * @returns {Promise<Object>} Deleted alert
+ */
+export async function deleteAlert(id) {
+  const alert = await repo.findAlertById(id);
+  if (!alert) throw new Error('Alert not found');
+  return repo.deleteAlert(id);
+}
+
+/**
+ * Get alert settings for a user
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} Alert settings
+ */
 export async function getAlertSettings(userId) {
   return repo.getAlertSettings(userId);
 }
 
+/**
+ * Update alert settings for a user
+ * @param {string} userId - User ID
+ * @param {Object} data - Settings data
+ * @returns {Promise<Object>} Updated settings
+ */
 export async function updateAlertSettings(userId, data) {
-  // Expect channels and thresholds to be JSON-able
   const payload = { ...data };
-  if (payload.channels && typeof payload.channels !== 'string') payload.channels = JSON.stringify(payload.channels);
+  
+  // Convert channels object to JSON string if needed
+  if (payload.channels && typeof payload.channels !== 'string') {
+    payload.channels = JSON.stringify(payload.channels);
+  }
+  
+  // Convert thresholds object to JSON string if needed
+  if (payload.thresholds && typeof payload.thresholds !== 'string') {
+    payload.thresholds = JSON.stringify(payload.thresholds);
+  }
+  
   return repo.updateAlertSettings(userId, payload);
 }
 
-export async function logAlertDelivery(alertId, channel, status, providerResponse) {
-  return repo.createDeliveryLog({ alertId, channel, status, providerRef: providerResponse?.id ?? null, error: providerResponse?.error ?? null });
+/**
+ * Test email notification
+ * @param {string} email - Test email address
+ * @returns {Promise<Object>} Test result
+ */
+export async function testEmailNotification(email) {
+  try {
+    const result = await notifications.testEmail(email);
+    return { success: true, result };
+  } catch (err) {
+    logger.error({ err, email }, 'alerts:test_email_error');
+    return { success: false, error: String(err) };
+  }
+}
+
+/**
+ * Test SMS notification
+ * @param {string} phoneNumber - Test phone number
+ * @returns {Promise<Object>} Test result
+ */
+export async function testSMSNotification(phoneNumber) {
+  try {
+    const result = await notifications.testSMS(phoneNumber);
+    return { success: true, result };
+  } catch (err) {
+    logger.error({ err, phoneNumber }, 'alerts:test_sms_error');
+    return { success: false, error: String(err) };
+  }
 }
