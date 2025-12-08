@@ -3,6 +3,9 @@ import logger from '../../utils/logger.js';
 
 /**
  * Create a new alert (POST /alerts)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
  */
 export async function createAlertHandler(req, res) {
   const payload = req.body;
@@ -20,6 +23,9 @@ export async function createAlertHandler(req, res) {
 
 /**
  * List alerts with filtering (GET /alerts)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
  */
 export async function listAlertsHandler(req, res) {
   try {
@@ -47,6 +53,9 @@ export async function listAlertsHandler(req, res) {
 
 /**
  * Get a single alert by ID (GET /alerts/:id)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
  */
 export async function getAlertHandler(req, res) {
   try {
@@ -61,6 +70,9 @@ export async function getAlertHandler(req, res) {
 
 /**
  * Delete an alert (DELETE /alerts/:id)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
  */
 export async function deleteAlertHandler(req, res) {
   try {
@@ -75,6 +87,9 @@ export async function deleteAlertHandler(req, res) {
 
 /**
  * Get alert settings for current user (GET /alerts/settings)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
  */
 export async function getSettingsHandler(req, res) {
   try {
@@ -93,6 +108,9 @@ export async function getSettingsHandler(req, res) {
 
 /**
  * Update alert settings for current user (PATCH /alerts/settings)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
  */
 export async function updateSettingsHandler(req, res) {
   try {
@@ -111,6 +129,9 @@ export async function updateSettingsHandler(req, res) {
 
 /**
  * Test email notification (POST /alerts/test/email)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
  */
 export async function testEmailHandler(req, res) {
   try {
@@ -133,6 +154,9 @@ export async function testEmailHandler(req, res) {
 
 /**
  * Test SMS notification (POST /alerts/test/sms)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
  */
 export async function testSMSHandler(req, res) {
   try {
