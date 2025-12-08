@@ -3,6 +3,7 @@ import { AlertType } from './alerts.enums.js';
 import logger from '../../utils/logger.js';
 import * as notifications from './notifications.js';
 import { prisma } from '../../config/prismaClient.js';
+import { NotFoundError, BadRequestError, ValidationError } from '../../utils/errors.js';
 
 // Duplicate prevention window (configurable via env, default 2 minutes)
 const DUPLICATE_WINDOW_MS = parseInt(process.env.ALERT_DUPLICATE_WINDOW_SECONDS || '120', 10) * 1000;
@@ -71,7 +72,7 @@ async function getUserFromTracker(trackerId) {
   });
   
   if (!tracker) {
-    throw new Error('Tracker not found');
+    throw new NotFoundError('Tracker');
   }
   
   return tracker.user;
@@ -86,20 +87,20 @@ export async function createAlert(payload) {
   const { trackerId, type, positionId, geofenceId = null, meta = {} } = payload;
 
   // Validation
-  if (!trackerId) throw new Error('trackerId is required');
-  if (!type) throw new Error('type is required');
-  if (!positionId) throw new Error('positionId is required');
+  if (!trackerId) throw new BadRequestError('trackerId is required');
+  if (!type) throw new BadRequestError('type is required');
+  if (!positionId) throw new BadRequestError('positionId is required');
   if (!Object.values(AlertType).includes(type)) {
-    throw new Error(`Invalid alert type: ${type}`);
+    throw new ValidationError(`Invalid alert type: ${type}`);
   }
 
   // Verify tracker exists
   const tracker = await prisma.tracker.findUnique({ where: { id: trackerId } });
-  if (!tracker) throw new Error('Tracker not found');
+  if (!tracker) throw new NotFoundError('Tracker');
 
   // Verify position exists
   const position = await prisma.position.findUnique({ where: { id: positionId } });
-  if (!position) throw new Error('Position not found');
+  if (!position) throw new NotFoundError('Position');
 
   // Check for duplicates
   const criteria = { trackerId, type, geofenceId };
@@ -183,7 +184,7 @@ export async function getAlerts(filter = {}, options = {}) {
  */
 export async function getAlertById(id) {
   const alert = await repo.findAlertById(id);
-  if (!alert) throw new Error('Alert not found');
+  if (!alert) throw new NotFoundError('Alert');
   return alert;
 }
 
@@ -194,7 +195,7 @@ export async function getAlertById(id) {
  */
 export async function deleteAlert(id) {
   const alert = await repo.findAlertById(id);
-  if (!alert) throw new Error('Alert not found');
+  if (!alert) throw new NotFoundError('Alert');
   return repo.deleteAlert(id);
 }
 

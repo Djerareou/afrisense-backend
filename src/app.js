@@ -11,6 +11,7 @@ import geofenceRoutes from './modules/geofences/geofences.routes.js';
 import alertsRoutes from './modules/alerts/alerts.routes.js';
 
 import swaggerUi from 'swagger-ui-express';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 // Charger OpenAPI
 const openapiPath = path.join(process.cwd(), 'src', 'docs', 'openapi.json');
@@ -34,5 +35,9 @@ app.use('/webhooks', positionsRoutes);
 
 // Swagger UI
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapi));
+
+// Error handling - must be last
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 export default app;
