@@ -28,6 +28,11 @@ export async function findAlerts(filter = {}, options = {}) {
   if (filter.trackerId) where.trackerId = filter.trackerId;
   if (filter.geofenceId) where.geofenceId = filter.geofenceId;
   
+  // User-based filtering: restrict to user's trackers
+  if (filter.userTrackerIds && filter.userTrackerIds.length > 0) {
+    where.trackerId = { in: filter.userTrackerIds };
+  }
+  
   if (filter.dateFrom || filter.dateTo) {
     where.timestamp = {};
     if (filter.dateFrom) where.timestamp.gte = new Date(filter.dateFrom);

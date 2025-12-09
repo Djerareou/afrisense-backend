@@ -81,9 +81,10 @@ async function getUserFromTracker(trackerId) {
 /**
  * Create a new alert
  * @param {Object} payload - Alert data
+ * @param {Object} userContext - User context { userId, role }
  * @returns {Promise<Object|null>} Created alert or null if skipped
  */
-export async function createAlert(payload) {
+export async function createAlert(payload, userContext = {}) {
   const { trackerId, type, positionId, geofenceId = null, meta = {} } = payload;
 
   // Validation
@@ -94,9 +95,18 @@ export async function createAlert(payload) {
     throw new ValidationError(`Invalid alert type: ${type}`);
   }
 
-  // Verify tracker exists
-  const tracker = await prisma.tracker.findUnique({ where: { id: trackerId } });
+  // Verify tracker exists and check ownership for non-admins
+  const tracker = await prisma.tracker.findUnique({ 
+    where: { id: trackerId },
+    include: { user: true }
+  });
   if (!tracker) throw new NotFoundError('Tracker');
+  
+  // Check permissions: admin/fleet_manager can create for any tracker
+  // Regular users cannot manually create alerts
+  if (userContext.role && !['admin', 'fleet_manager'].includes(userContext.role)) {
+    throw new BadRequestError('Insufficient permissions to create alerts');
+  }
 
   // Verify position exists
   const position = await prisma.position.findUnique({ where: { id: positionId } });
@@ -110,7 +120,7 @@ export async function createAlert(payload) {
   }
 
   // Get user for notification settings
-  const user = await getUserFromTracker(trackerId);
+  const user = tracker.user;
   const settings = await repo.getAlertSettings(user.id);
 
   // Check if alerts are enabled for this user
@@ -171,20 +181,53 @@ export async function createAlert(payload) {
  * Get alerts with filtering
  * @param {Object} filter - Filter criteria
  * @param {Object} options - Pagination options
+ * @param {Object} userContext - User context { userId, role }
  * @returns {Promise<Array>} List of alerts
  */
-export async function getAlerts(filter = {}, options = {}) {
+export async function getAlerts(filter = {}, options = {}, userContext = {}) {
+  // For non-admin users, filter by their trackers only
+  if (userContext.userId && userContext.role !== 'admin') {
+    // Get user's trackers
+    const userTrackers = await prisma.tracker.findMany({
+      where: { userId: userContext.userId },
+      select: { id: true }
+    });
+    
+    const trackerIds = userTrackers.map(t => t.id);
+    
+    // If user has specific trackerId in filter, verify ownership
+    if (filter.trackerId && !trackerIds.includes(filter.trackerId)) {
+      throw new BadRequestError('Access denied to this tracker');
+    }
+    
+    // Add userId filter to restrict to user's trackers
+    filter.userTrackerIds = trackerIds;
+  }
+  
   return repo.findAlerts(filter, options);
 }
 
 /**
  * Get a single alert by ID
  * @param {string} id - Alert ID
+ * @param {Object} userContext - User context { userId, role }
  * @returns {Promise<Object>} Alert object
  */
-export async function getAlertById(id) {
+export async function getAlertById(id, userContext = {}) {
   const alert = await repo.findAlertById(id);
   if (!alert) throw new NotFoundError('Alert');
+  
+  // Check ownership for non-admin users
+  if (userContext.userId && userContext.role !== 'admin') {
+    const tracker = await prisma.tracker.findUnique({
+      where: { id: alert.trackerId }
+    });
+    
+    if (!tracker || tracker.userId !== userContext.userId) {
+      throw new BadRequestError('Access denied to this alert');
+    }
+  }
+  
   return alert;
 }
 

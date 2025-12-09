@@ -9,7 +9,8 @@ import { BadRequestError, UnauthorizedError, InternalServerError } from '../../u
  * @returns {Promise<void>}
  */
 export const createAlertHandler = asyncHandler(async (req, res) => {
-  const result = await service.createAlert(req.body);
+  const userContext = { userId: req.user.userId, role: req.user.role };
+  const result = await service.createAlert(req.body, userContext);
   
   if (!result) {
     return res.status(204).json({ message: 'Alert skipped (duplicate or disabled)' });
@@ -25,6 +26,7 @@ export const createAlertHandler = asyncHandler(async (req, res) => {
  * @returns {Promise<void>}
  */
 export const listAlertsHandler = asyncHandler(async (req, res) => {
+  const userContext = { userId: req.user.userId, role: req.user.role };
   const filter = {
     type: req.query.type,
     trackerId: req.query.trackerId,
@@ -39,7 +41,7 @@ export const listAlertsHandler = asyncHandler(async (req, res) => {
   const skip = parseInt(req.query.skip || '0', 10);
   const take = parseInt(req.query.take || '50', 10);
   
-  const items = await service.getAlerts(filter, { skip, take });
+  const items = await service.getAlerts(filter, { skip, take }, userContext);
   res.json({ success: true, data: items, count: items.length });
 });
 
@@ -50,7 +52,8 @@ export const listAlertsHandler = asyncHandler(async (req, res) => {
  * @returns {Promise<void>}
  */
 export const getAlertHandler = asyncHandler(async (req, res) => {
-  const alert = await service.getAlertById(req.params.id);
+  const userContext = { userId: req.user.userId, role: req.user.role };
+  const alert = await service.getAlertById(req.params.id, userContext);
   res.json({ success: true, data: alert });
 });
 
