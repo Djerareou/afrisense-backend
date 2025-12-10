@@ -1,5 +1,8 @@
 generator client {
   provider = "prisma-client-js"
+  // Output to the hidden .prisma folder under node_modules so imports from
+  // `@prisma/client` continue to work and generated files are isolated.
+  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {

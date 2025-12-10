@@ -1,25 +1,17 @@
 import fs from 'fs';
 import path from 'path';
 import pino from 'pino';
-import rfs from 'rotating-file-stream';
+import { createStream } from 'rotating-file-stream';
 
 const LOG_DIR = process.env.LOG_DIR || path.join(process.cwd(), 'logs');
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 
 // rotating file stream: rotate daily, keep 7 days
-// support different module shapes (some versions export the function directly)
-const createStreamFn = (rfs && typeof rfs.createStream === 'function') ? rfs.createStream : (typeof rfs === 'function' ? rfs : null);
-let stream;
-if (createStreamFn) {
-  stream = createStreamFn('app.log', {
-    interval: '1d',
-    path: LOG_DIR,
-    maxFiles: 7,
-  });
-} else {
-  // fallback to a writable stream to stdout when rotating-file-stream is unavailable
-  stream = process.stdout;
-}
+const stream = createStream('app.log', {
+  interval: '1d',
+  path: LOG_DIR,
+  maxFiles: 7,
+});
 
 const level = process.env.LOG_LEVEL || 'info';
 

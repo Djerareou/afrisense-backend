@@ -20,10 +20,11 @@ async function sendNotification(channel, alert, settings) {
   }
 }
 
+import NotificationService from '../../services/notification.service.js';
+
 export async function createAlert(payload) {
   // Validation
-  const { userId, trackerId, type, severity, positionId, metadata = {} } = payload;
-  if (!positionId) throw new Error('positionId is required');
+  const { userId, trackerId, type, severity, positionId = null, metadata = {} } = payload;
 
   // Verify tracker ownership
   const tracker = await import('../../config/prismaClient.js').then(m => m.prisma).then(p => p.tracker.findUnique({ where: { id: trackerId } }));
@@ -43,7 +44,7 @@ export async function createAlert(payload) {
   // Persist alert
   const stored = await repo.createAlert({ userId, trackerId, type, severity, geofenceId: payload.geofenceId ?? null, positionId, metadata });
 
-  // Notify according to settings
+  // Notify according to settings (legacy internal provider)
   const channels = (settings && settings.channels) ? JSON.parse(settings.channels) : null;
   const preferred = channels || ['CONSOLE'];
 
@@ -52,6 +53,14 @@ export async function createAlert(payload) {
     const result = await sendNotification(channel, stored, settings);
     const status = result.status === 'success' ? 'success' : 'failure';
     await repo.createDeliveryLog({ alertId: stored.id, channel, status, providerRef: result.providerRef ?? null, error: result.error ?? null });
+  }
+
+  // Also trigger external notification service (Resend/CallMeBot) - best effort
+  try {
+    const user = await import('../../config/prismaClient.js').then(m => m.prisma).then(p => p.user.findUnique({ where: { id: userId } }));
+    NotificationService.notifyAll(stored, user).catch(() => {});
+  } catch (e) {
+    // ignore
   }
 
   return stored;

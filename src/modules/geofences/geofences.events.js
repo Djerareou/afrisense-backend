@@ -90,6 +90,13 @@ export async function detectAndPersistGeofenceTransitions(position) {
       } catch (e) {
         // ignore dynamic import errors
       }
+      // Also invoke centralized alert engine (best-effort)
+      try {
+        const engine = await import('../../engine/alerts/alert-engine.js');
+        engine.default.runRulesForGeofenceEvent(created).catch(() => {});
+      } catch (e) {
+        // ignore
+      }
     }
   }
 

@@ -11,6 +11,7 @@ import geofenceRoutes from './modules/geofences/geofences.routes.js';
 import alertsRoutes from './modules/alerts/alerts.routes.js';
 
 import swaggerUi from 'swagger-ui-express';
+import { startAlertSchedulers } from './scheduler/alerts.scheduler.js';
 
 // Charger OpenAPI
 const openapiPath = path.join(process.cwd(), 'src', 'docs', 'openapi.json');
@@ -34,5 +35,12 @@ app.use('/webhooks', positionsRoutes);
 
 // Swagger UI
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapi));
+
+// Start background schedulers (alerts)
+try {
+	startAlertSchedulers();
+} catch (err) {
+	console.error('Failed to start alert schedulers', err);
+}
 
 export default app;

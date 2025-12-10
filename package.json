@@ -22,6 +22,7 @@
     "joi": "^17.10.0",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^3.0.2",
+    "nodemailer": "^7.0.11",
     "pino": "^10.1.0",
     "rotating-file-stream": "^3.0.4",
     "swagger-ui-express": "^4.6.3",

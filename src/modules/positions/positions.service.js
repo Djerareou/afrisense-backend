@@ -8,6 +8,7 @@ import { detectAndPersistGeofenceTransitions } from '../geofences/geofences.even
 import logger from '../../utils/logger.js';
 
 
+
 /**
  * normalize a validated position object (zod parsed)
  */
@@ -137,6 +138,14 @@ export async function ingestPosition(payload, userContext = {}) {
   } catch (e) {
     // do not break position ingestion on alert errors
     logger.warn({ e }, 'alerts:processing_failed');
+  }
+
+  // Run global rule engine (best-effort, non-blocking)
+  try {
+    const engine = await import('../../engine/alerts/alert-engine.js');
+    engine.default.runRulesForPosition(inserted).catch(() => {});
+  } catch (e) {
+    logger.warn({ e }, 'alertEngine:invoke_failed');
   }
 
   return inserted;
