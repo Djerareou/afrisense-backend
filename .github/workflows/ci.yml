@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:15
+        image: postgis/postgis:15-3.3
         env:
           POSTGRES_DB: afrisense_test
           POSTGRES_USER: postgres
@@ -41,6 +41,13 @@ jobs:
         run: npm ci
       - name: Generate Prisma client
         run: npx prisma generate
+      - name: Wait for Postgres and enable PostGIS
+        env:
+          PGPASSWORD: postgres
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client
+          until pg_isready -h localhost -p 5432 -U postgres; do sleep 1; done
+          psql -h localhost -U postgres -d afrisense_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
       - name: Apply migrations
         run: npx prisma migrate deploy
       - name: Run tests
