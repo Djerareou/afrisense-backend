@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "send-test-twilio": "node src/scripts/send_test_twilio.js",
     "test": "npm run test:unit && npm run test:integration",
     "test:ci": "npx prisma migrate deploy && jest --runInBand",
     "test:local": "npx prisma migrate reset --force && jest --runInBand",
@@ -26,6 +27,7 @@
     "pino": "^10.1.0",
     "rotating-file-stream": "^3.0.4",
     "swagger-ui-express": "^4.6.3",
+    "twilio": "^4.23.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {
