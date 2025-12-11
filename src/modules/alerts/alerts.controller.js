@@ -1,58 +1,131 @@
 import * as service from './alerts.service.js';
+import { asyncHandler } from '../../middleware/errorHandler.js';
+import { BadRequestError, UnauthorizedError, InternalServerError } from '../../utils/errors.js';
 
-export async function createAlertHandler(req, res) {
-  const payload = req.body;
-  try {
-    const userId = req.user?.id || payload.userId;
-    const result = await service.createAlert({ ...payload, userId });
-    if (!result) return res.status(204).send();
-    return res.status(201).json(result);
-  } catch (err) {
-    return res.status(400).json({ error: String(err) });
+/**
+ * Create a new alert (POST /alerts)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
+ */
+export const createAlertHandler = asyncHandler(async (req, res) => {
+  const userContext = { userId: req.user.userId, role: req.user.role };
+  const result = await service.createAlert(req.body, userContext);
+  
+  if (!result) {
+    return res.status(204).json({ message: 'Alert skipped (duplicate or disabled)' });
   }
-}
+  
+  res.status(201).json({ success: true, data: result });
+});
 
-export async function listAlertsHandler(req, res) {
-  const filter = { ...req.query };
+/**
+ * List alerts with filtering (GET /alerts)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
+ */
+export const listAlertsHandler = asyncHandler(async (req, res) => {
+  const userContext = { userId: req.user.userId, role: req.user.role };
+  const filter = {
+    type: req.query.type,
+    trackerId: req.query.trackerId,
+    geofenceId: req.query.geofenceId,
+    dateFrom: req.query.dateFrom,
+    dateTo: req.query.dateTo
+  };
+  
+  // Remove undefined values
+  Object.keys(filter).forEach(key => filter[key] === undefined && delete filter[key]);
+  
   const skip = parseInt(req.query.skip || '0', 10);
   const take = parseInt(req.query.take || '50', 10);
-  try {
-    filter.userId = req.user?.id || filter.userId;
-    const items = await service.getAlerts(filter, { skip, take });
-    return res.json(items);
-  } catch (err) {
-    return res.status(400).json({ error: String(err) });
-  }
-}
+  
+  const items = await service.getAlerts(filter, { skip, take }, userContext);
+  res.json({ success: true, data: items, count: items.length });
+});
 
-export async function updateAlertStatusHandler(req, res) {
-  const id = req.params.id;
-  const { status } = req.body;
-  try {
-    const userId = req.user?.id;
-    const updated = await service.updateAlertStatus(id, userId, status);
-    return res.json(updated);
-  } catch (err) {
-    return res.status(400).json({ error: String(err) });
-  }
-}
+/**
+ * Get a single alert by ID (GET /alerts/:id)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
+ */
+export const getAlertHandler = asyncHandler(async (req, res) => {
+  const userContext = { userId: req.user.userId, role: req.user.role };
+  const alert = await service.getAlertById(req.params.id, userContext);
+  res.json({ success: true, data: alert });
+});
 
-export async function getSettingsHandler(req, res) {
-  try {
-    const userId = req.user?.id;
-    const settings = await service.getAlertSettings(userId);
-    return res.json(settings);
-  } catch (err) {
-    return res.status(400).json({ error: String(err) });
-  }
-}
+/**
+ * Delete an alert (DELETE /alerts/:id)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
+ */
+export const deleteAlertHandler = asyncHandler(async (req, res) => {
+  await service.deleteAlert(req.params.id);
+  res.json({ success: true, message: 'Alert deleted' });
+});
 
-export async function updateSettingsHandler(req, res) {
-  try {
-    const userId = req.user?.id;
-    const updated = await service.updateAlertSettings(userId, req.body);
-    return res.json(updated);
-  } catch (err) {
-    return res.status(400).json({ error: String(err) });
+/**
+ * Get alert settings for current user (GET /alerts/settings)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
+ */
+export const getSettingsHandler = asyncHandler(async (req, res) => {
+  if (!req.user?.id) {
+    throw new UnauthorizedError('Authentication required');
   }
-}
+  
+  const settings = await service.getAlertSettings(req.user.id);
+  res.json({ success: true, data: settings });
+});
+
+/**
+ * Update alert settings for current user (PATCH /alerts/settings)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
+ */
+export const updateSettingsHandler = asyncHandler(async (req, res) => {
+  if (!req.user?.id) {
+    throw new UnauthorizedError('Authentication required');
+  }
+  
+  const updated = await service.updateAlertSettings(req.user.id, req.body);
+  res.json({ success: true, data: updated });
+});
+
+/**
+ * Test email notification (POST /alerts/test/email)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
+ */
+export const testEmailHandler = asyncHandler(async (req, res) => {
+  const result = await service.testEmailNotification(req.body.email);
+  
+  if (result.success) {
+    res.json({ success: true, message: 'Test email sent', data: result.result });
+  } else {
+    throw new InternalServerError(result.error);
+  }
+});
+
+/**
+ * Test SMS notification (POST /alerts/test/sms)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @returns {Promise<void>}
+ */
+export const testSMSHandler = asyncHandler(async (req, res) => {
+  const result = await service.testSMSNotification(req.body.phoneNumber);
+  
+  if (result.success) {
+    res.json({ success: true, message: 'Test SMS sent', data: result.result });
+  } else {
+    throw new InternalServerError(result.error);
+  }
+});

@@ -9,8 +9,8 @@ import {
 } from './trackers.model.js';
 
 import { normalizeProtocol, sanitizeIMEI, defaultStatus, mapBatteryToStatus } from './trackers.utils.js';
+import * as repository from './trackers.repository.js';
 import logger from '../../utils/logger.js';
-import { prisma } from '../../config/prismaClient.js';
 import { TrackerMessages } from './messages.js';
 
 /**
@@ -37,13 +37,11 @@ export async function registerTracker(data) {
   const tracker = await createTracker(payload);
   // audit log entry in TrackerConfigLog for creation — swallow errors during unit tests
   try {
-    await prisma.trackerConfigLog.create({
-      data: {
-        trackerId: tracker.id,
-        command: 'CREATE_TRACKER',
-        status: 'success',
-        response: JSON.stringify({ createdBy: data.userId }),
-      },
+    await repository.createConfigLog({
+      trackerId: tracker.id,
+      command: 'CREATE_TRACKER',
+      status: 'success',
+      response: JSON.stringify({ createdBy: data.userId }),
     });
   } catch (e) {
     logger.warn({ action: 'audit_create_failed', error: e?.message });
@@ -77,13 +75,11 @@ export async function modifyTracker(id, updateData) {
 
   const updated = await updateTracker(id, updateData);
   try {
-    await prisma.trackerConfigLog.create({
-      data: {
-        trackerId: id,
-        command: 'UPDATE_TRACKER',
-        status: 'success',
-        response: JSON.stringify(updateData),
-      },
+    await repository.createConfigLog({
+      trackerId: id,
+      command: 'UPDATE_TRACKER',
+      status: 'success',
+      response: JSON.stringify(updateData),
     });
   } catch (e) {
     logger.warn({ action: 'audit_update_failed', error: e?.message });
@@ -97,13 +93,11 @@ export async function removeTracker(id) {
   await getTracker(id); // verify existence
   const removed = await deleteTracker(id);
   try {
-    await prisma.trackerConfigLog.create({
-      data: {
-        trackerId: id,
-        command: 'DELETE_TRACKER',
-        status: 'success',
-        response: null,
-      },
+    await repository.createConfigLog({
+      trackerId: id,
+      command: 'DELETE_TRACKER',
+      status: 'success',
+      response: null,
     });
   } catch (e) {
     logger.warn({ action: 'audit_delete_failed', error: e?.message });
