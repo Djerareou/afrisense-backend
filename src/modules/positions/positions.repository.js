@@ -34,7 +34,7 @@ export async function findTrackerByImei(imei) {
  * @returns {Promise<Object|null>}
  */
 export async function findPositionByExternalId(externalId) {
-  return prisma.position.findUnique({
+  return prisma.position.findFirst({
     where: { externalId },
   });
 }

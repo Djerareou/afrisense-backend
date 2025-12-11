@@ -53,8 +53,7 @@ export async function createAlert(payload, userContext = {}) {
 
   // Verify tracker exists and check ownership for non-admins
   const tracker = await prisma.tracker.findUnique({
-    where: { id: trackerId },
-    include: { user: true }
+    where: { id: trackerId }
   });
   if (!tracker) throw new NotFoundError('Tracker');
 

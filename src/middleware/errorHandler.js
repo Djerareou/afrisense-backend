@@ -1,5 +1,5 @@
 import logger from '../utils/logger.js';
-import { AppError } from '../utils/errors.js';
+import { AppError, NotFoundError } from '../utils/errors.js';
 
 /**
  * Convert operational errors to standard format
@@ -52,11 +52,11 @@ function formatError(err) {
     };
   }
 
-  // Default error
+  // Default error - in production mask internal messages
   return {
     statusCode: 500,
     status: 'error',
-    message: err.message || 'Internal server error'
+    message: process.env.NODE_ENV === 'production' ? 'Internal server error' : (err.message || 'Internal server error')
   };
 }
 
@@ -159,15 +159,8 @@ export function errorHandler(err, req, res, next) {
  * @param {import('express').NextFunction} next - Express next function
  */
 export function notFoundHandler(req, res, next) {
-  // Use NotFoundError so callers/tests can identify the specific error class
-  // Defer import here to avoid circular deps in some environments
-  import('../utils/errors.js').then(mod => {
-    const { NotFoundError } = mod;
-    next(new NotFoundError(`Route ${req.originalUrl} not found`));
-  }).catch(() => {
-    // Fallback to generic AppError if import fails
-    next(new AppError(`Route ${req.originalUrl} not found`, 404));
-  });
+  // Synchronous - emit a NotFoundError instance so tests/callers can inspect it
+  next(new NotFoundError(`Route ${req.originalUrl} not found`));
 }
 
 /**
