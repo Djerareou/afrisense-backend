@@ -159,8 +159,9 @@ export function errorHandler(err, req, res, next) {
  * @param {import('express').NextFunction} next - Express next function
  */
 export function notFoundHandler(req, res, next) {
-  // Synchronous - emit a NotFoundError instance so tests/callers can inspect it
-  next(new NotFoundError(`Route ${req.originalUrl} not found`));
+  // Synchronous - emit a NotFoundError instance including HTTP method so tests/callers can inspect it
+  const msg = `${req.method || 'GET'} ${req.originalUrl} not found`;
+  next(new NotFoundError(msg));
 }
 
 /**
