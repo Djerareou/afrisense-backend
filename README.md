@@ -47,6 +47,35 @@ Choose the alternative if you want to avoid the experimental flag or need broade
 - If tests fail due to missing packages, run `npm install` and re-run `npm test`.
 - If you see syntax errors from third-party packages, you may need to adjust Jest's `transformIgnorePatterns` or transpile some node_modules using Babel.
 
+## New Features: Hybrid-Intelligence Mode
+
+AfriSense now supports multiple data ingestion sources for GPS positions:
+
+### SMS Fallback Ingestion
+Receive position data via SMS when trackers have cellular but no internet connection.
+
+**Endpoint:** `POST /webhooks/sms/receive`
+
+**Documentation:** See [HYBRID_INTELLIGENCE_MODE.md](./HYBRID_INTELLIGENCE_MODE.md)
+
+### Offline Buffer Sync
+Bulk upload positions collected during offline periods.
+
+**Endpoint:** `POST /api/positions/sync`
+
+**Features:**
+- Idempotent via `externalId`
+- Automatic geofence detection
+- Alert creation for geofence events
+- Batch processing support
+
+### Key Benefits
+- **Resilient Data Collection**: Never lose position data due to connectivity issues
+- **Unified Processing**: All sources (tracker, SMS, recovery) use same geofence and alert logic
+- **Production Ready**: Full test coverage, comprehensive documentation, and security validation
+
+For complete documentation, configuration, and usage examples, see [HYBRID_INTELLIGENCE_MODE.md](./HYBRID_INTELLIGENCE_MODE.md).
+
 If you want, I can:
 - add a `jest.config.js` file,
 - add an optional `test:jest` script that runs Jest directly without the `node` wrapper (for environments that handle ESM differently), or
