@@ -6,6 +6,7 @@ import {
   ingestTraccarWebhook,
   getPositions,
   getOnePosition,
+  syncPositions,
 } from './positions.controller.js';
 
 const router = express.Router();
@@ -24,6 +25,9 @@ router.post('/bulk', authMiddleware, async (req, res) => {
     res.status(400).json({ success: false, error: err.message });
   }
 });
+
+// Batch sync endpoint for offline tracker buffer recovery - protected
+router.post('/sync', authMiddleware, syncPositions);
 
 // Traccar webhook - you may protect with an API key or allow system role
 router.post('/webhook/traccar', authMiddleware, ingestTraccarWebhook);

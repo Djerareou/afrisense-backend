@@ -9,6 +9,7 @@ import trackerRoutes from './modules/trackers/trackers.routes.js';
 import positionsRoutes from './modules/positions/positions.routes.js';
 import geofenceRoutes from './modules/geofences/geofences.routes.js';
 import alertsRoutes from './modules/alerts/alerts.routes.js';
+import smsRoutes from './modules/sms/sms.routes.js';
 
 import swaggerUi from 'swagger-ui-express';
 import { startAlertSchedulers } from './scheduler/alerts.scheduler.js';
@@ -30,8 +31,9 @@ app.use('/api/positions', positionsRoutes);
 app.use('/api/geofences', geofenceRoutes);
 app.use('/api/alerts', alertsRoutes);
 
-// Webhooks (le fichier positions.routes gère déjà /webhook/traccar)
-app.use('/webhooks', positionsRoutes);
+// Webhooks
+app.use('/webhooks', positionsRoutes); // Traccar webhook
+app.use('/webhooks/sms', smsRoutes); // SMS webhook
 
 // Swagger UI
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapi));

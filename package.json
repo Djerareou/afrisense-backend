@@ -37,6 +37,7 @@
     "eslint": "^8.44.0",
     "jest": "^29.7.0",
     "nodemon": "^2.0.22",
+    "prisma": "^6.19.0",
     "supertest": "^6.3.3"
   },
   "author": "Djerareou Arsene",
