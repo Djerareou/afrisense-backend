@@ -75,3 +75,48 @@ export async function getOnePosition(req, res) {
     return res.status(500).json({ success: false, error: err.message });
   }
 }
+
+/**
+ * Batch sync endpoint for offline tracker buffer recovery
+ * Accepts array of positions with idempotence via externalId
+ */
+export async function syncPositions(req, res) {
+  try {
+    const userContext = { userId: req.user?.userId, role: req.user?.role };
+    const { positions } = req.body;
+
+    if (!Array.isArray(positions)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'positions must be an array' 
+      });
+    }
+
+    if (positions.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'positions array is empty' 
+      });
+    }
+
+    // Normalize positions to include source if not provided
+    const normalizedPositions = positions.map(p => ({
+      ...p,
+      source: p.source || 'recovery',
+    }));
+
+    // Enable geofence detection for sync endpoint (true parameter)
+    const result = await service.ingestPositionsBulk(normalizedPositions, userContext, true);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        insertedCount: result.inserted || 0,
+        skippedCount: result.errors?.length || 0,
+        errors: result.errors || [],
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+}

@@ -154,9 +154,10 @@ export async function ingestPosition(payload, userContext = {}) {
 
 
 /**
- * ingest bulk positions
+ * ingest bulk positions (with optional post-processing)
+ * @param {boolean} runGeofenceDetection - If true, runs geofence detection for each position (slower but complete)
  */
-export async function ingestPositionsBulk(items, userContext = {}) {
+export async function ingestPositionsBulk(items, userContext = {}, runGeofenceDetection = false) {
   const parsed = bulkPositionsSchema.parse(items);
 
   // Prefetch trackers by IMEI
@@ -236,17 +237,46 @@ export async function ingestPositionsBulk(items, userContext = {}) {
 
   if (toInsert.length === 0) return { inserted: 0, errors };
 
-  // Chunked insert
-  const CHUNK_SIZE = parseInt(process.env.POSITIONS_BULK_CHUNK_SIZE || '5000', 10);
-  const createData = toInsert.map(t => t.normalized);
-
   let totalInserted = 0;
-  for (let i = 0; i < createData.length; i += CHUNK_SIZE) {
-    const chunk = createData.slice(i, i + CHUNK_SIZE);
-    const res = await model.createPositionsBulk(chunk);
+  
+  // If geofence detection is required, insert positions individually
+  if (runGeofenceDetection) {
+    for (const item of toInsert) {
+      try {
+        const position = await model.createPosition(item.normalized);
+        totalInserted++;
 
-    if (Array.isArray(res)) totalInserted += res.length;
-    else if (typeof res?.count === 'number') totalInserted += res.count;
+        // Run geofence detection for this position
+        try {
+          await detectAndPersistGeofenceTransitions(position);
+        } catch (err) {
+          logger.error({ err, positionId: position.id }, 'Geofence detection failed');
+        }
+      } catch (err) {
+        // Handle duplicate errors gracefully
+        if (err?.code === 'P2002') {
+          errors.push({ index: item.index, error: PositionsMessages.POSITION_DUPLICATE });
+        } else {
+          logger.error({ err, index: item.index }, 'Position insertion failed');
+          errors.push({ index: item.index, error: err.message });
+        }
+      }
+    }
+  } else {
+    // Fast path: bulk insert without geofence detection
+    const CHUNK_SIZE = parseInt(process.env.POSITIONS_BULK_CHUNK_SIZE || '5000', 10);
+    const createData = toInsert.map(t => t.normalized);
+    
+    for (let i = 0; i < createData.length; i += CHUNK_SIZE) {
+      const chunk = createData.slice(i, i + CHUNK_SIZE);
+      const res = await model.createPositionsBulk(chunk);
+
+      if (Array.isArray(res)) {
+        totalInserted += res.length;
+      } else if (typeof res?.count === 'number') {
+        totalInserted += res.count;
+      }
+    }
   }
 
   return { inserted: totalInserted, errors };
