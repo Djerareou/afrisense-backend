@@ -34,7 +34,6 @@
     "swagger-ui-express": "^4.6.3",
     "twilio": "^4.23.0",
     "zod": "^4.1.13"
-  ,"twilio": "^4.8.0"
   },
   "devDependencies": {
     "@babel/core": "^7.28.5",

@@ -71,7 +71,7 @@ function handlePrismaError(err) {
       return {
         statusCode: 409,
         status: 'fail',
-        message: 'Duplicate entry',
+        message: 'Resource already exists',
         details: err.meta?.target
       };
     case 'P2025':
@@ -159,8 +159,15 @@ export function errorHandler(err, req, res, next) {
  * @param {import('express').NextFunction} next - Express next function
  */
 export function notFoundHandler(req, res, next) {
-  const err = new AppError(`Route ${req.originalUrl} not found`, 404);
-  next(err);
+  // Use NotFoundError so callers/tests can identify the specific error class
+  // Defer import here to avoid circular deps in some environments
+  import('../utils/errors.js').then(mod => {
+    const { NotFoundError } = mod;
+    next(new NotFoundError(`Route ${req.originalUrl} not found`));
+  }).catch(() => {
+    // Fallback to generic AppError if import fails
+    next(new AppError(`Route ${req.originalUrl} not found`, 404));
+  });
 }
 
 /**

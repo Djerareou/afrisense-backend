@@ -28,10 +28,11 @@ export class ValidationError extends AppError {
    * @param {string} message - Validation error message
    * @param {Array<Object>} details - Validation error details
    */
-  constructor(message = 'Validation failed', details = []) {
+  constructor(message = 'Validation failed', details) {
     super(message, 400);
     this.name = 'ValidationError';
-    this.details = details;
+    // only set details if provided to avoid sending empty arrays in responses
+    if (details !== undefined) this.details = details;
   }
 }
 
@@ -40,10 +41,13 @@ export class ValidationError extends AppError {
  */
 export class NotFoundError extends AppError {
   /**
-   * @param {string} resource - Resource that was not found
+   * @param {string} messageOrResource - Either a full message or a resource name
    */
-  constructor(resource = 'Resource') {
-    super(`${resource} not found`, 404);
+  constructor(messageOrResource = 'Resource') {
+    const msg = String(messageOrResource || 'Resource');
+    // If caller passed a full sentence containing 'not found', use it as-is
+    const finalMessage = msg.toLowerCase().includes('not found') ? msg : `${msg} not found`;
+    super(finalMessage, 404);
     this.name = 'NotFoundError';
   }
 }

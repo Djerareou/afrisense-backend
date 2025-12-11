@@ -16,12 +16,16 @@ import { prisma } from '../../config/prismaClient.js';
  * @returns {Promise<Object>}
  */
 export async function createConfigLog(logData) {
-  return prisma.trackerConfigLog.create({
-    data: {
-      trackerId: logData.trackerId,
-      command: logData.command,
-      status: logData.status,
-      response: logData.response,
-    },
-  });
+  const data = {
+    trackerId: logData.trackerId,
+    configKey: logData.configKey,
+    newValue: logData.newValue,
+    changedBy: logData.changedBy
+  };
+
+  if (Object.prototype.hasOwnProperty.call(logData, 'oldValue')) {
+    data.oldValue = logData.oldValue;
+  }
+
+  return prisma.trackerConfigLog.create({ data });
 }

@@ -34,7 +34,7 @@ export async function findTrackerByImei(imei) {
  * @returns {Promise<Object|null>}
  */
 export async function findPositionByExternalId(externalId) {
-  return prisma.position.findFirst({
+  return prisma.position.findUnique({
     where: { externalId },
   });
 }
@@ -46,8 +46,7 @@ export async function findPositionByExternalId(externalId) {
  */
 export async function findTrackersByImeis(imeis) {
   return prisma.tracker.findMany({
-    where: { imei: { in: imeis } },
-    select: { id: true, imei: true, userId: true },
+    where: { imei: { in: imeis } }
   });
 }
 
@@ -58,8 +57,7 @@ export async function findTrackersByImeis(imeis) {
  */
 export async function findPositionsByExternalIds(externalIds) {
   return prisma.position.findMany({
-    where: { externalId: { in: externalIds } },
-    select: { externalId: true },
+    where: { externalId: { in: externalIds } }
   });
 }
 
@@ -69,8 +67,8 @@ export async function findPositionsByExternalIds(externalIds) {
  * @returns {Promise<Array>}
  */
 export async function findTrackersByIds(trackerIds) {
+  if (!trackerIds || trackerIds.length === 0) return [];
   return prisma.tracker.findMany({
-    where: { id: { in: trackerIds } },
-    select: { id: true, userId: true },
+    where: { id: { in: trackerIds } }
   });
 }
