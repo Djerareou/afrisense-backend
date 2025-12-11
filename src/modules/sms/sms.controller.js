@@ -54,3 +54,15 @@ export async function smsWebhookHandler(req, res) {
     });
   }
 }
+
+export async function smsDeliveryHandler(req, res) {
+  try {
+    const rawPayload = req.body;
+    logger.info({ headers: req.headers, bodyKeys: Object.keys(rawPayload) }, 'SMS delivery webhook received');
+    const result = await import('./sms.service.js').then(m => m.handleDeliveryReport(rawPayload));
+    res.status(200).json({ success: true, result });
+  } catch (err) {
+    logger.error({ err, body: req.body }, 'SMS delivery handler error');
+    res.status(500).json({ success: false, error: err.message });
+  }
+}

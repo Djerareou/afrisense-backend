@@ -171,3 +171,45 @@ export async function handleSmsPayload(raw) {
     throw err;
   }
 }
+
+/**
+ * Handle delivery report payloads from SMS providers (Africa's Talking, etc.)
+ * @param {object} raw - Raw webhook payload
+ * @returns {Promise<object>} result
+ */
+export async function handleDeliveryReport(raw) {
+  // Africa's Talking delivery callback includes fields: id, status, number, networkCode, failureReason, retryCount
+  const id = raw.id || raw.messageId || raw.MessageId || raw.message_id || raw.messageId;
+  const status = raw.status || raw.Status || raw.statusCode || raw.StatusCode;
+  const to = raw.number || raw.to || raw.toNumber || raw.msisdn;
+  const failureReason = raw.failureReason || raw.failure_reason || raw.failure || null;
+
+  if (!id) {
+    throw new Error('DELIVERY_MISSING_ID: provider message id missing');
+  }
+
+  // Normalize status to simple success/failure/pending
+  const normalized = (s) => {
+    if (!s) return 'unknown';
+    const S = String(s).toLowerCase();
+    if (S === 'success' || S === 'sent' || S === 'submitted') return 'success';
+    if (S === 'failed' || S === 'rejected' || S === 'do not disturbrejection' || S === 'donotdisturbrejection') return 'failure';
+    if (S === 'buffered' || S === 'queued' || S === 'submitted') return 'pending';
+    return S;
+  };
+
+  const mapped = normalized(status);
+
+  // Find matching alert delivery log by providerRef
+  const existing = await prisma.alertDeliveryLog.findFirst({ where: { providerRef: id } }).catch(() => null);
+  if (!existing) {
+    // No matching delivery log found - log and return
+    logger.warn({ id, status: mapped, to, failureReason }, 'Delivery report received but no matching alertDeliveryLog found');
+    return { matched: false, providerRef: id, status: mapped };
+  }
+
+  // Update the delivery log status and processedAt and error if any
+  const updated = await prisma.alertDeliveryLog.update({ where: { id: existing.id }, data: { status: mapped, processedAt: new Date(), error: failureReason || null } });
+  logger.info({ deliveryLogId: updated.id, alertId: updated.alertId, status: updated.status }, 'Updated alertDeliveryLog from delivery report');
+  return { matched: true, deliveryLogId: updated.id, alertId: updated.alertId, status: updated.status };
+}

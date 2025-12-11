@@ -4,7 +4,7 @@
  */
 
 import express from 'express';
-import { smsWebhookHandler } from './sms.controller.js';
+import { smsWebhookHandler, smsDeliveryHandler } from './sms.controller.js';
 
 const router = express.Router();
 
@@ -15,5 +15,11 @@ const router = express.Router();
  * Optional: Add signature validation in service layer for security
  */
 router.post('/receive', smsWebhookHandler);
+router.post('/delivery', smsDeliveryHandler);
+/**
+ * POST /webhooks/sms/delivery
+ * Callback endpoint for delivery reports (Africa's Talking, providers)
+ */
+router.post('/delivery', smsWebhookHandler);
 
 export default router;
