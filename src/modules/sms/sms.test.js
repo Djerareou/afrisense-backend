@@ -85,6 +85,16 @@ describe('SMS Utils - parseShortSms', () => {
     expect(() => parseShortSms('')).toThrow('SMS_INVALID_FORMAT: text is empty');
     expect(() => parseShortSms(null)).toThrow('SMS_INVALID_FORMAT: text is empty');
   });
+
+  test('throws error for latitude out of range', () => {
+    const sms = 'AF|T:123456789012345|TS:2025-12-11T10:30:00.000Z|LAT:999|LON:3.3';
+    expect(() => parseShortSms(sms)).toThrow('SMS_INVALID_FORMAT: latitude out of range');
+  });
+
+  test('throws error for longitude out of range', () => {
+    const sms = 'AF|T:123456789012345|TS:2025-12-11T10:30:00.000Z|LAT:6.5|LON:999';
+    expect(() => parseShortSms(sms)).toThrow('SMS_INVALID_FORMAT: longitude out of range');
+  });
 });
 
 describe('SMS Service - handleSmsPayload', () => {

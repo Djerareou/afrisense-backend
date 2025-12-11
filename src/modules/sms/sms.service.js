@@ -12,11 +12,11 @@ import logger from '../../utils/logger.js';
 /**
  * Extract SMS body from various provider formats
  * @param {object} raw - Raw webhook payload
- * @returns {string} SMS body text
+ * @returns {string|null} SMS body text or null if not found
  */
 function extractSmsBody(raw) {
   // Support multiple provider formats
-  return raw.Body || raw.body || raw.message || raw.text || raw.Message || '';
+  return raw.Body || raw.body || raw.message || raw.text || raw.Message || null;
 }
 
 /**
@@ -72,6 +72,9 @@ export async function handleSmsPayload(raw) {
     };
 
     // Check for duplicate by externalId
+    // Note: There's a potential race condition here - two concurrent requests could both
+    // pass this check. The database unique constraint on externalId will catch duplicates,
+    // handled in the catch block below with P2002 error code.
     if (positionData.externalId) {
       const existing = await prisma.position.findUnique({
         where: { externalId: positionData.externalId },
@@ -88,7 +91,8 @@ export async function handleSmsPayload(raw) {
       position = await prisma.position.create({ data: positionData });
       logger.info({ positionId: position.id }, 'Position created from SMS');
     } catch (err) {
-      // Handle race condition on externalId unique constraint
+      // Handle race condition: if another request created this position concurrently,
+      // the unique constraint on externalId will fail with P2002
       if (err?.code === 'P2002' && positionData.externalId) {
         const existing = await prisma.position.findUnique({
           where: { externalId: positionData.externalId },
@@ -133,8 +137,9 @@ export async function handleSmsPayload(raw) {
         logger.info({ alertId: sosAlert?.id }, 'SOS alert created');
       }
 
-      // Low battery alert (< 20%)
-      if (parsed.bat !== null && parsed.bat < 20) {
+      // Low battery alert (configurable threshold, default 20%)
+      const lowBatteryThreshold = parseInt(process.env.LOW_BATTERY_THRESHOLD || '20', 10);
+      if (parsed.bat !== null && parsed.bat < lowBatteryThreshold) {
         const batteryAlert = await createAlert({
           userId: tracker.userId,
           trackerId: tracker.id,

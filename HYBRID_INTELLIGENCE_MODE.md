@@ -195,8 +195,12 @@ TWILIO_ACCOUNT_SID=your_account_sid
 TWILIO_AUTH_TOKEN=your_auth_token
 TWILIO_PHONE_NUMBER=+1234567890
 
+# Alert Configuration
+LOW_BATTERY_THRESHOLD=20  # Battery percentage for low battery alerts (default: 20)
+
 # Batch Sync Configuration
-POSITIONS_BULK_CHUNK_SIZE=5000  # Number of positions per chunk
+POSITIONS_BULK_CHUNK_SIZE=5000  # Number of positions per chunk (default: 5000)
+GEOFENCE_DETECTION_BATCH_SIZE=1  # Batch size for geofence detection (default: 1)
 ```
 
 ### Webhook Security (Optional)

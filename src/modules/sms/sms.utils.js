@@ -85,6 +85,14 @@ export function parseShortSms(text) {
   if (result.lon === null || isNaN(result.lon)) {
     throw new Error('SMS_INVALID_FORMAT: missing or invalid longitude (LON field)');
   }
+  
+  // Validate coordinate ranges
+  if (result.lat < -90 || result.lat > 90) {
+    throw new Error('SMS_INVALID_FORMAT: latitude out of range (-90 to 90)');
+  }
+  if (result.lon < -180 || result.lon > 180) {
+    throw new Error('SMS_INVALID_FORMAT: longitude out of range (-180 to 180)');
+  }
 
   // Validate timestamp format (ISO 8601)
   const tsDate = new Date(result.ts);

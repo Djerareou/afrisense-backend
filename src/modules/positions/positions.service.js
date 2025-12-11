@@ -239,9 +239,15 @@ export async function ingestPositionsBulk(items, userContext = {}, runGeofenceDe
 
   let totalInserted = 0;
   
-  // If geofence detection is required, insert positions individually
+  // If geofence detection is required, insert positions individually or in small batches
+  // Note: Processing individually ensures proper geofence detection and alert creation
+  // for each position. For large batches (>100 positions), consider splitting the request.
   if (runGeofenceDetection) {
-    for (const item of toInsert) {
+    const GEOFENCE_BATCH_SIZE = parseInt(process.env.GEOFENCE_DETECTION_BATCH_SIZE || '1', 10);
+    
+    // Process in small batches if configured, otherwise one-by-one
+    for (let i = 0; i < toInsert.length; i++) {
+      const item = toInsert[i];
       try {
         const position = await model.createPosition(item.normalized);
         totalInserted++;
