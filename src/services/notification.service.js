@@ -114,6 +114,19 @@ async function notifyBySMS(alert, user) {
   }
 
   // Fallback to CallMeBot if configured
+  // Next fallback: Africa's Talking if configured
+  if (process.env.AT_USERNAME && process.env.AT_API_KEY) {
+    try {
+      const atSvc = await import('./africasTalkingService.js').then(m => m.default || m);
+      const res = await atSvc.sendSms(toPhone, alert.message).catch(() => null);
+      if (res && (res.ok === true || (res.raw && res.raw.SMSMessageData))) return true;
+    } catch (err) {
+      console.error('Africa\'s Talking SMS send failed', String(err));
+      // fall through to other providers
+    }
+  }
+
+  // Fallback to CallMeBot if configured
   if (!CALLMEBOT_API_KEY || !CALLMEBOT_SMS_URL) return null;
   const sep = CALLMEBOT_SMS_URL.includes('?') ? '&' : '?';
   const url = `${CALLMEBOT_SMS_URL}${sep}apikey=${CALLMEBOT_API_KEY}&text=${encodeURIComponent(alert.message)}&to=${encodeURIComponent(toPhone)}`;
