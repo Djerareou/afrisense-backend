@@ -99,14 +99,28 @@ async function notifyByEmail(alert, user) {
 }
 
 async function notifyBySMS(alert, user) {
+  const toPhone = NOTIFY_OVERRIDE_PHONE || user?.phone || '';
+
+  // Prefer Twilio if configured
+  if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && (process.env.TWILIO_FROM_NUMBER || process.env.TWILIO_WHATSAPP_FROM)) {
+    try {
+      const twilioSvc = await import('../services/twilioService.js').then(m => m.default || m);
+      const res = await twilioSvc.sendSms(toPhone, alert.message).catch(() => null);
+      return Boolean(res && res.sid);
+    } catch (err) {
+      console.error('Twilio SMS send failed', String(err));
+      // fall through to other providers
+    }
+  }
+
+  // Fallback to CallMeBot if configured
   if (!CALLMEBOT_API_KEY || !CALLMEBOT_SMS_URL) return null;
-  const toPhone = NOTIFY_OVERRIDE_PHONE || user.phone || '';
   const sep = CALLMEBOT_SMS_URL.includes('?') ? '&' : '?';
   const url = `${CALLMEBOT_SMS_URL}${sep}apikey=${CALLMEBOT_API_KEY}&text=${encodeURIComponent(alert.message)}&to=${encodeURIComponent(toPhone)}`;
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      try { const t = await res.text(); console.error('CallMeBot SMS error', res.status, t); console.log('CallMeBot SMS error', res.status, t); } catch (e) { console.error('CallMeBot SMS error', res.status); console.log('CallMeBot SMS error', res.status); }
+      try { const t = await res.text(); console.error('CallMeBot SMS error', res.status, t); } catch (e) { console.error('CallMeBot SMS error', res.status); }
       return false;
     }
     return true;
@@ -117,20 +131,33 @@ async function notifyBySMS(alert, user) {
 }
 
 async function notifyByWhatsApp(alert, user) {
+  const toPhone = NOTIFY_OVERRIDE_PHONE || user?.phone || '';
+
+  // Prefer Twilio WhatsApp if configured
+  if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && (process.env.TWILIO_WHATSAPP_FROM || process.env.TWILIO_FROM_NUMBER)) {
+    try {
+      const twilioSvc = await import('../services/twilioService.js').then(m => m.default || m);
+      const res = await twilioSvc.sendWhatsApp(toPhone, alert.message).catch(() => null);
+      return Boolean(res && res.sid);
+    } catch (err) {
+      console.error('Twilio WhatsApp send failed', String(err));
+      // fall through to other providers
+    }
+  }
+
+  // Fallback to CallMeBot if configured
   if (!CALLMEBOT_API_KEY || !CALLMEBOT_WHATSAPP_URL) return null;
-  const toPhone = NOTIFY_OVERRIDE_PHONE || user.phone || '';
   const sep = CALLMEBOT_WHATSAPP_URL.includes('?') ? '&' : '?';
   const url = `${CALLMEBOT_WHATSAPP_URL}${sep}apikey=${CALLMEBOT_API_KEY}&text=${encodeURIComponent(alert.message)}&to=${encodeURIComponent(toPhone)}`;
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      try { const t = await res.text(); console.error('CallMeBot WhatsApp error', res.status, t); console.log('CallMeBot WhatsApp error', res.status, t); } catch (e) { console.error('CallMeBot WhatsApp error', res.status); console.log('CallMeBot WhatsApp error', res.status); }
+      try { const t = await res.text(); console.error('CallMeBot WhatsApp error', res.status, t); } catch (e) { console.error('CallMeBot WhatsApp error', res.status); }
       return false;
     }
     return true;
   } catch (err) {
     console.error('CallMeBot WhatsApp fetch failed', String(err));
-    console.log('CallMeBot WhatsApp fetch failed', String(err));
     return false;
   }
 }
