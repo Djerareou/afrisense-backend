@@ -2,7 +2,6 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import notificationService from '../services/notification.service.js';
 
 // Usage:
 //   node src/scripts/test_notify_alert.js [+235...] [test@example.com] ["Message body"]
@@ -20,8 +19,12 @@ if (!toPhone && !toEmail) {
 const user = { id: 'test-user', phone: toPhone, email: toEmail };
 const alert = { title: 'AfriSense test alert', message };
 
+// Important: import notification service after dotenv.config so env vars are available to the module
 (async () => {
   try {
+    const notificationModule = await import('../services/notification.service.js');
+    const notificationService = notificationModule.default || notificationModule;
+
     console.log('Sending test notification to', { phone: toPhone, email: toEmail });
     const result = await notificationService.notifyAll(alert, user);
     console.log('Result:', result);
