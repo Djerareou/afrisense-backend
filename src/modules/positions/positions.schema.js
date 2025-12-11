@@ -30,7 +30,7 @@ export const positionSchema = z.object({
   externalId: z.string().optional(),
   odometer: z.number().nonnegative().optional(),
   accuracy: z.number().nonnegative().optional(),
-  source: z.enum(['tracker','gateway','manual','import']).optional(),
+  source: z.enum(['tracker','gateway','manual','import','sms','recovery']).optional(),
 });
 
 export const bulkPositionsSchema = z.array(positionSchema).min(1);
