@@ -135,107 +135,48 @@ export async function createAlert(payload, userContext = {}) {
  
 }
 
-/**
- * Get alerts with filtering
- * @param {Object} filter - Filter criteria
- * @param {Object} options - Pagination options
- * @param {Object} userContext - User context { userId, role }
- * @returns {Promise<Array>} List of alerts
- */
 export async function getAlerts(filter = {}, options = {}, userContext = {}) {
   // For non-admin users, filter by their trackers only
   if (userContext.userId && userContext.role !== 'admin') {
-    // Get user's trackers
-    const userTrackers = await prisma.tracker.findMany({
-      where: { userId: userContext.userId },
-      select: { id: true }
-    });
-    
+    const userTrackers = await prisma.tracker.findMany({ where: { userId: userContext.userId }, select: { id: true } });
     const trackerIds = userTrackers.map(t => t.id);
-    
-    // If user has specific trackerId in filter, verify ownership
     if (filter.trackerId && !trackerIds.includes(filter.trackerId)) {
       throw new BadRequestError('Access denied to this tracker');
     }
-    
-    // Add userId filter to restrict to user's trackers
     filter.userTrackerIds = trackerIds;
   }
-  
   return repo.findAlerts(filter, options);
 }
 
-/**
- * Get a single alert by ID
- * @param {string} id - Alert ID
- * @param {Object} userContext - User context { userId, role }
- * @returns {Promise<Object>} Alert object
- */
 export async function getAlertById(id, userContext = {}) {
   const alert = await repo.findAlertById(id);
   if (!alert) throw new NotFoundError('Alert');
-  
-  // Check ownership for non-admin users
   if (userContext.userId && userContext.role !== 'admin') {
-    const tracker = await prisma.tracker.findUnique({
-      where: { id: alert.trackerId }
-    });
-    
+    const tracker = await prisma.tracker.findUnique({ where: { id: alert.trackerId } });
     if (!tracker || tracker.userId !== userContext.userId) {
       throw new BadRequestError('Access denied to this alert');
     }
   }
-  
   return alert;
 }
 
-/**
- * Delete an alert
- * @param {string} id - Alert ID
- * @returns {Promise<Object>} Deleted alert
- */
 export async function deleteAlert(id) {
   const alert = await repo.findAlertById(id);
   if (!alert) throw new NotFoundError('Alert');
   return repo.deleteAlert(id);
 }
 
-/**
- * Get alert settings for a user
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Alert settings
- */
 export async function getAlertSettings(userId) {
   return repo.getAlertSettings(userId);
 }
 
-/**
- * Update alert settings for a user
- * @param {string} userId - User ID
- * @param {Object} data - Settings data
- * @returns {Promise<Object>} Updated settings
- */
 export async function updateAlertSettings(userId, data) {
   const payload = { ...data };
-  
-  // Convert channels object to JSON string if needed
-  if (payload.channels && typeof payload.channels !== 'string') {
-    payload.channels = JSON.stringify(payload.channels);
-  }
-  
-  // Convert thresholds object to JSON string if needed
-  if (payload.thresholds && typeof payload.thresholds !== 'string') {
-    payload.thresholds = JSON.stringify(payload.thresholds);
-  }
-  
+  if (payload.channels && typeof payload.channels !== 'string') payload.channels = JSON.stringify(payload.channels);
+  if (payload.thresholds && typeof payload.thresholds !== 'string') payload.thresholds = JSON.stringify(payload.thresholds);
   return repo.updateAlertSettings(userId, payload);
 }
 
-/**
- * Test email notification
- * @param {string} email - Test email address
- * @returns {Promise<Object>} Test result
- */
 export async function testEmailNotification(email) {
   try {
     const result = await notifications.testEmail(email);
@@ -246,11 +187,6 @@ export async function testEmailNotification(email) {
   }
 }
 
-/**
- * Test SMS notification
- * @param {string} phoneNumber - Test phone number
- * @returns {Promise<Object>} Test result
- */
 export async function testSMSNotification(phoneNumber) {
   try {
     const result = await notifications.testSMS(phoneNumber);

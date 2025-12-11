@@ -32,6 +32,7 @@
     "pino": "^10.1.0",
     "rotating-file-stream": "^3.0.4",
     "swagger-ui-express": "^4.6.3",
+    "twilio": "^4.23.0",
     "zod": "^4.1.13"
   ,"twilio": "^4.8.0"
   },
