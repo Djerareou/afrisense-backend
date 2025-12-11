@@ -27,7 +27,6 @@ model User {
   subscriptions Subscription[]
   payments      Payment[]
   geofences     Geofence[]
-  alerts        Alert[]
   vehicles      Vehicle[]
 
   alertSettings AlertSetting[] // ajout pour la relation
@@ -123,6 +122,7 @@ model Position {
 
   tracker        Tracker         @relation(fields: [trackerId], references: [id])
   geofenceEvents GeofenceEvent[]
+  alerts         Alert[]
   // For PostGIS geometry (optional)
   // location Unsupported("geometry")
 
@@ -137,18 +137,13 @@ model Position {
 enum AlertType {
   GEOFENCE_ENTER
   GEOFENCE_EXIT
-  BATTERY_LOW
-  OFFLINE
-  SOS
   OVERSPEED
-  VIBRATION
-  CUSTOM
-}
-
-enum AlertSeverity {
-  INFO
-  WARNING
-  CRITICAL
+  NO_MOVEMENT
+  LOW_BATTERY
+  SIGNAL_LOSS
+  SUSPICIOUS_STOP
+  HIGH_TEMPERATURE
+  DEVICE_OFFLINE
 }
 
 enum NotificationChannel {
@@ -159,29 +154,26 @@ enum NotificationChannel {
   WEBHOOK
 }
 
-/// ===== ALERT (améliorée) =====
+/// ===== ALERT (structure selon spécifications) =====
 model Alert {
-  id          String        @id @default(uuid())
-  trackerId   String?
-  userId      String? // l'alerte peut être globale (userId null) ou ciblée
-  type        AlertType // event type (enum)
-  title       String? // court résumé/label
-  message     String // message complet (texte)
-  severity    AlertSeverity // importance
-  metadata    Json? // JSON libre (ex: speed, distance, geofenceId)
-  status      String        @default("new") // new, sent, acknowledged, dismissed
-  createdAt   DateTime      @default(now())
-  deliveredAt DateTime?
+  id         String    @id @default(uuid())
+  type       AlertType
+  trackerId  String
+  geofenceId String?
+  positionId String
+  timestamp  DateTime  @default(now())
+  meta       Json?
 
   // relations
-  tracker      Tracker?           @relation(fields: [trackerId], references: [id])
-  user         User?              @relation(fields: [userId], references: [id])
-  deliveryLogs AlertDeliveryLog[] // ajout pour la relation
+  tracker      Tracker              @relation(fields: [trackerId], references: [id])
+  position     Position             @relation(fields: [positionId], references: [id])
+  geofence     Geofence?            @relation(fields: [geofenceId], references: [id])
+  deliveryLogs AlertDeliveryLog[]
 
   // indexes pour recherches rapides
-  @@index([userId, createdAt])
-  @@index([trackerId, createdAt])
-  @@index([type, createdAt])
+  @@index([trackerId, timestamp])
+  @@index([type, timestamp])
+  @@index([geofenceId, timestamp])
 }
 
 /// ===== ALERT SETTINGS (préférences utilisateur) =====
@@ -275,6 +267,7 @@ model Geofence {
 
   trackers       Tracker[]       @relation("TrackerGeofences")
   geofenceEvents GeofenceEvent[]
+  alerts         Alert[]
   user           User            @relation(fields: [userId], references: [id])
   userId         String
 }

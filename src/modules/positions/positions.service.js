@@ -1,9 +1,9 @@
 // src/modules/positions/positions.service.js
 import { positionSchema, bulkPositionsSchema } from './positions.schema.js';
 import * as model from './positions.model.js';
+import * as repository from './positions.repository.js';
 import { toISO, haversineDistance } from './positions.utils.js';
 import { PositionsMessages } from './positions.messages.js';
-import { prisma } from '../../config/prismaClient.js';
 import { detectAndPersistGeofenceTransitions } from '../geofences/geofences.events.js';
 import logger from '../../utils/logger.js';
 
@@ -41,7 +41,7 @@ export async function ingestPosition(payload, userContext = {}) {
   // resolve trackerId
   let trackerId = parsed.trackerId;
   if (!trackerId && parsed.trackerImei) {
-    const tracker = await prisma.tracker.findUnique({ where: { imei: parsed.trackerImei } });
+    const tracker = await repository.findTrackerByImei(parsed.trackerImei);
 
     if (!tracker) throw new Error(PositionsMessages.TRACKER_NOT_FOUND);
     if (userContext.userId && userContext.role !== 'admin' && tracker.userId !== userContext.userId) {
@@ -55,7 +55,7 @@ export async function ingestPosition(payload, userContext = {}) {
 
   // idempotence
   if (parsed.externalId) {
-    const existing = await prisma.position.findFirst({ where: { externalId: parsed.externalId } });
+    const existing = await repository.findPositionByExternalId(parsed.externalId);
     if (existing) throw new Error(PositionsMessages.POSITION_DUPLICATE);
   } else {
     const existing = await model.findPositionByTrackerAndTimestamp(trackerId, parsed.timestamp);
@@ -84,7 +84,7 @@ export async function ingestPosition(payload, userContext = {}) {
     inserted = await model.createPosition(normalized);
   } catch (err) {
     if (err?.code === 'P2002' && parsed.externalId) {
-      const existing = await prisma.position.findFirst({ where: { externalId: parsed.externalId } });
+      const existing = await repository.findPositionByExternalId(parsed.externalId);
       if (existing) return existing;
     }
     throw err;
@@ -101,7 +101,7 @@ export async function ingestPosition(payload, userContext = {}) {
   try {
     const alerts = await import('../alerts/alerts.service.js');
     // get tracker owner
-    let tracker = await prisma.tracker.findUnique({ where: { id: trackerId } });
+    let tracker = await repository.findTrackerById(trackerId);
     if (normalized.speed != null) {
       const settings = await alerts.getAlertSettings(tracker.userId);
       const thresholds = settings?.thresholds ? JSON.parse(settings.thresholds) : {};
@@ -164,10 +164,7 @@ export async function ingestPositionsBulk(items, userContext = {}, runGeofenceDe
   const imeis = [...new Set(parsed.filter(p => p.trackerImei).map(p => p.trackerImei))];
 
   const trackers = imeis.length
-    ? await prisma.tracker.findMany({
-        where: { imei: { in: imeis } },
-        select: { id: true, imei: true, userId: true },
-      })
+    ? await repository.findTrackersByImeis(imeis)
     : [];
 
   const imeiMap = Object.fromEntries(trackers.map(t => [t.imei, t.id]));
@@ -186,10 +183,7 @@ export async function ingestPositionsBulk(items, userContext = {}, runGeofenceDe
   const externalIds = [...new Set(itemsResolved.filter(i => i.original.externalId).map(i => i.original.externalId))];
 
   const existingExternal = externalIds.length
-    ? await prisma.position.findMany({
-        where: { externalId: { in: externalIds } },
-        select: { externalId: true },
-      })
+    ? await repository.findPositionsByExternalIds(externalIds)
     : [];
 
   const existingSet = new Set(existingExternal.map(e => e.externalId));
@@ -201,10 +195,7 @@ export async function ingestPositionsBulk(items, userContext = {}, runGeofenceDe
   const trackerIds = [...new Set(itemsResolved.map(i => i.resolvedTrackerId).filter(Boolean))];
 
   if (trackerIds.length) {
-    const trackersById = await prisma.tracker.findMany({
-      where: { id: { in: trackerIds } },
-      select: { id: true, userId: true },
-    });
+    const trackersById = await repository.findTrackersByIds(trackerIds);
     for (const t of trackersById) ownerMap[t.id] = t.userId;
   }
 

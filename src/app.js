@@ -13,6 +13,7 @@ import smsRoutes from './modules/sms/sms.routes.js';
 
 import swaggerUi from 'swagger-ui-express';
 import { startAlertSchedulers } from './scheduler/alerts.scheduler.js';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 // Charger OpenAPI
 const openapiPath = path.join(process.cwd(), 'src', 'docs', 'openapi.json');
@@ -44,5 +45,9 @@ try {
 } catch (err) {
 	console.error('Failed to start alert schedulers', err);
 }
+
+// Error handling - must be last
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 export default app;
