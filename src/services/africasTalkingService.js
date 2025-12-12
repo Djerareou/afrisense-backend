@@ -20,7 +20,10 @@ export async function sendSms(to, message) {
     // We consider success if at least one recipient has status 'Success'
     const recipients = res && res.SMSMessageData && res.SMSMessageData.Recipients ? res.SMSMessageData.Recipients : [];
     const ok = recipients.some(r => /success/i.test(r.status || ''));
-    return { ok, raw: res };
+    // Try to extract a provider reference (message id) from first recipient
+    const first = recipients[0] || {};
+    const providerRef = first.messageId || first.id || first.messageId || null;
+    return { ok, raw: res, providerRef };
   } catch (err) {
     console.error('africastalking: sms send failed', String(err));
     return null;

@@ -23,6 +23,8 @@ const app = express();
 // Middlewares globaux
 app.use(cors());
 app.use(express.json());
+// Parse application/x-www-form-urlencoded bodies (required for many SMS provider callbacks)
+app.use(express.urlencoded({ extended: true }));
 
 // Routes principales
 app.use('/api/auth', authRoutes);

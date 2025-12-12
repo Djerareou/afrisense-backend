@@ -55,10 +55,19 @@ export async function createAlert(payload) {
     await repo.createDeliveryLog({ alertId: stored.id, channel, status, providerRef: result.providerRef ?? null, error: result.error ?? null });
   }
 
-  // Also trigger external notification service (Resend/CallMeBot) - best effort
+  // Also trigger external notification service (Resend/CallMeBot, Twilio, Africa's Talking) - best effort
   try {
     const user = await import('../../config/prismaClient.js').then(m => m.prisma).then(p => p.user.findUnique({ where: { id: userId } }));
-    NotificationService.notifyAll(stored, user).catch(() => {});
+    const notifyResults = await NotificationService.notifyAll(stored, user).catch(() => null);
+    if (notifyResults) {
+      // Persist delivery logs for external sends (sms, email, whatsapp)
+      for (const [ch, res] of Object.entries(notifyResults)) {
+        const channel = (ch || '').toUpperCase();
+        const status = res && res.ok ? 'success' : 'failure';
+        const providerRef = res && (res.providerRef ?? (res.raw && res.raw.messageId) ?? null);
+        await repo.createDeliveryLog({ alertId: stored.id, channel, status, providerRef, error: res && res.error ? res.error : null }).catch(() => {});
+      }
+    }
   } catch (e) {
     // ignore
   }

@@ -10,9 +10,42 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/**
- * ---------------------- USERS ----------------------
- */
+// -----------------------------------------------------------------------------
+// ENUMS
+// -----------------------------------------------------------------------------
+
+/// Alert types
+enum AlertType {
+  GEOFENCE_ENTER
+  GEOFENCE_EXIT
+  BATTERY_LOW
+  OFFLINE
+  SOS
+  OVERSPEED
+  VIBRATION
+  CUSTOM
+}
+
+/// Alert severity levels
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+/// Notification channels
+enum NotificationChannel {
+  CONSOLE
+  EMAIL
+  SMS
+  PUSH
+  WEBHOOK
+}
+
+
+// -----------------------------------------------------------------------------
+// USER / AUTH / ENTITIES
+// -----------------------------------------------------------------------------
 
 model User {
   id           String   @id @default(uuid())
@@ -23,19 +56,21 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
 
+  // relations
   trackers      Tracker[]
   subscriptions Subscription[]
+  wallet        Wallet?
   payments      Payment[]
   geofences     Geofence[]
   alerts        Alert[]
   vehicles      Vehicle[]
-
-  alertSettings AlertSetting[] // ajout pour la relation
+  alertSettings AlertSetting[]
 }
 
-/**
- * ---------------------- VEHICLES ----------------------
- */
+
+// -----------------------------------------------------------------------------
+// VEHICLE / TRACKER / ASSIGNMENTS
+// -----------------------------------------------------------------------------
 
 model Vehicle {
   id        String   @id @default(uuid())
@@ -50,10 +85,6 @@ model Vehicle {
   user        User                @relation(fields: [userId], references: [id])
   assignments TrackerAssignment[]
 }
-
-/**
- * ---------------------- TRACKERS ----------------------
- */
 
 model Tracker {
   id                String    @id @default(uuid())
@@ -83,10 +114,6 @@ model Tracker {
   geofenceEvents GeofenceEvent[]
 }
 
-/**
- * ---------- HISTORIQUE DES AFFECTATIONS TRACKER → VEHICLE ----------
- */
-
 model TrackerAssignment {
   id         String    @id @default(uuid())
   trackerId  String
@@ -98,9 +125,10 @@ model TrackerAssignment {
   vehicle Vehicle @relation(fields: [vehicleId], references: [id])
 }
 
-/**
- * ---------------------- POSITIONS GPS ----------------------
- */
+
+// -----------------------------------------------------------------------------
+// POSITIONS
+// -----------------------------------------------------------------------------
 
 model Position {
   id           String                               @id @default(uuid())
@@ -123,43 +151,15 @@ model Position {
 
   tracker        Tracker         @relation(fields: [trackerId], references: [id])
   geofenceEvents GeofenceEvent[]
-  // For PostGIS geometry (optional)
-  // location Unsupported("geometry")
 
   @@index([trackerId, timestamp])
 }
 
-/**
- * ---------------------- ALERTES ----------------------
- */
 
-/// ===== ENUMS (optionnels mais recommandés) =====
-enum AlertType {
-  GEOFENCE_ENTER
-  GEOFENCE_EXIT
-  BATTERY_LOW
-  OFFLINE
-  SOS
-  OVERSPEED
-  VIBRATION
-  CUSTOM
-}
+// -----------------------------------------------------------------------------
+// ALERTS & NOTIFICATIONS
+// -----------------------------------------------------------------------------
 
-enum AlertSeverity {
-  INFO
-  WARNING
-  CRITICAL
-}
-
-enum NotificationChannel {
-  CONSOLE
-  EMAIL
-  SMS
-  PUSH
-  WEBHOOK
-}
-
-/// ===== ALERT (améliorée) =====
 model Alert {
   id          String        @id @default(uuid())
   trackerId   String?
@@ -176,7 +176,7 @@ model Alert {
   // relations
   tracker      Tracker?           @relation(fields: [trackerId], references: [id])
   user         User?              @relation(fields: [userId], references: [id])
-  deliveryLogs AlertDeliveryLog[] // ajout pour la relation
+  deliveryLogs AlertDeliveryLog[]
 
   // indexes pour recherches rapides
   @@index([userId, createdAt])
@@ -184,7 +184,6 @@ model Alert {
   @@index([type, createdAt])
 }
 
-/// ===== ALERT SETTINGS (préférences utilisateur) =====
 model AlertSetting {
   id         String   @id @default(uuid())
   userId     String
@@ -200,7 +199,6 @@ model AlertSetting {
   @@unique([userId]) // 1 param set par user
 }
 
-/// ===== ALERT DELIVERY LOG (traçabilité d'envoi) =====
 model AlertDeliveryLog {
   id          String              @id @default(uuid())
   alertId     String
@@ -217,9 +215,10 @@ model AlertDeliveryLog {
   @@index([channel, status])
 }
 
-/**
- * ---------- LOGS DES COMMANDES ET CONFIGURATIONS TRACKER ----------
- */
+
+// -----------------------------------------------------------------------------
+// TRACKER COMMAND LOGS
+// -----------------------------------------------------------------------------
 
 model TrackerConfigLog {
   id        String   @id @default(uuid())
@@ -232,15 +231,42 @@ model TrackerConfigLog {
   tracker Tracker @relation(fields: [trackerId], references: [id])
 }
 
-/**
- * ---------------------- FINTECH MODULE ----------------------
- */
+
+// -----------------------------------------------------------------------------
+// FINTECH / BILLING
+// -----------------------------------------------------------------------------
+
+model Wallet {
+  id          String               @id @default(uuid())
+  userId      String               @unique
+  balance     Float                @default(0)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  user        User                 @relation(fields: [userId], references: [id])
+  transactions WalletTransaction[]
+}
+
+model WalletTransaction {
+  id          String   @id @default(uuid())
+  walletId    String
+  type        String   // "debit" | "credit"
+  amount      Float
+  description String?
+  meta        Json?
+  createdAt   DateTime @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+}
 
 model Subscription {
-  id     String   @id @default(uuid())
-  userId String   @unique
-  plan   String
-  expiry DateTime
+  id        String   @id @default(uuid())
+  userId    String
+  plan      String   // Starter | Pro | Premium
+  status    String   // active | inactive | trial
+  startDate DateTime
+  endDate   DateTime
+  autoRenew Boolean  @default(true)
 
   user User @relation(fields: [userId], references: [id])
 }
@@ -256,9 +282,10 @@ model Payment {
   user User @relation(fields: [userId], references: [id])
 }
 
-/**
- * ---------------------- GEOFENCES ----------------------
- */
+
+// -----------------------------------------------------------------------------
+// GEOFENCES & EVENTS
+// -----------------------------------------------------------------------------
 
 model Geofence {
   id          String   @id @default(uuid())
@@ -267,7 +294,7 @@ model Geofence {
   type        String // "circle" ou "polygon"
   radius      Float?
   center      Json?
-  coordinates Json? // pour polygon
+  coordinates Json? // for polygon
   color       String?
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -279,7 +306,6 @@ model Geofence {
   userId         String
 }
 
-/// ===== GEOFENCE EVENT (positionId obligatoire) =====
 model GeofenceEvent {
   id         String   @id @default(uuid())
   trackerId  String
@@ -297,3 +323,4 @@ model GeofenceEvent {
   @@index([trackerId, timestamp])
   @@index([geofenceId, timestamp])
 }
+

@@ -35,26 +35,26 @@ async function notifyByEmail(alert, user) {
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
     });
     try {
-      await transporter.sendMail({
+      const info = await transporter.sendMail({
         from: process.env.SMTP_FROM || RESEND_FROM_EMAIL || process.env.SMTP_USER,
         to: toEmail,
         subject: `[AfriSense] ${alert.title}`,
         text: alert.message,
         html: `<pre>${alert.message}</pre>`
       });
-      return true;
+      return { ok: true, provider: 'smtp', providerRef: info.messageId || null, raw: info };
     } catch (e) {
       console.error('SMTP send failed', String(e));
-      return false;
+      return { ok: false, provider: 'smtp', error: String(e) };
     }
   };
 
   // If SMTP is preferred or Resend is not available, try SMTP first
   if (SMTP_PREFERRED || (!RESEND_API_KEY && process.env.SMTP_HOST)) {
     const ok = await sendViaSMTP();
-    if (ok) return true;
+    if (ok && ok.ok) return ok; // return the object
     // If SMTP failed and Resend is available, fall back
-    if (!RESEND_API_KEY) return false;
+    if (!RESEND_API_KEY) return ok;
     console.log('SMTP failed; attempting Resend fallback');
   }
 
@@ -73,21 +73,22 @@ async function notifyByEmail(alert, user) {
         if (res.status === 403 && /domain is not verified|validation_error/i.test(text) && process.env.SMTP_HOST) {
           console.log('Resend refused (domain not verified) - falling back to SMTP');
           const smtpOk = await sendViaSMTP();
-          return Boolean(smtpOk);
+          return smtpOk;
         }
 
-        return false;
+        return { ok: false, provider: 'resend', error: text || `status_${res.status}` };
       }
-      return true;
+      const bodyText = await res.text().catch(() => null);
+      return { ok: true, provider: 'resend', providerRef: null, raw: bodyText };
     } catch (err) {
       console.error('Resend fetch failed', String(err));
       // If Resend fetch throws and SMTP is available, try SMTP
       if (process.env.SMTP_HOST) {
         console.log('Resend fetch failed; trying SMTP fallback');
         const smtpOk = await sendViaSMTP();
-        return Boolean(smtpOk);
+        return smtpOk;
       }
-      return false;
+      return { ok: false, provider: 'resend', error: String(err) };
     }
   }
 
@@ -106,7 +107,8 @@ async function notifyBySMS(alert, user) {
     try {
       const twilioSvc = await import('../services/twilioService.js').then(m => m.default || m);
       const res = await twilioSvc.sendSms(toPhone, alert.message).catch(() => null);
-      return Boolean(res && res.sid);
+      if (!res) return { ok: false, provider: 'twilio' };
+      return { ok: true, provider: 'twilio', providerRef: res.sid || null, raw: res };
     } catch (err) {
       console.error('Twilio SMS send failed', String(err));
       // fall through to other providers
@@ -119,7 +121,8 @@ async function notifyBySMS(alert, user) {
     try {
       const atSvc = await import('./africasTalkingService.js').then(m => m.default || m);
       const res = await atSvc.sendSms(toPhone, alert.message).catch(() => null);
-      if (res && (res.ok === true || (res.raw && res.raw.SMSMessageData))) return true;
+      if (!res) return { ok: false, provider: 'africastalking' };
+      return { ok: Boolean(res.ok), provider: 'africastalking', providerRef: res.providerRef ?? null, raw: res.raw };
     } catch (err) {
       console.error('Africa\'s Talking SMS send failed', String(err));
       // fall through to other providers
@@ -127,19 +130,19 @@ async function notifyBySMS(alert, user) {
   }
 
   // Fallback to CallMeBot if configured
-  if (!CALLMEBOT_API_KEY || !CALLMEBOT_SMS_URL) return null;
+  if (!CALLMEBOT_API_KEY || !CALLMEBOT_SMS_URL) return { ok: false, provider: 'callmebot' };
   const sep = CALLMEBOT_SMS_URL.includes('?') ? '&' : '?';
   const url = `${CALLMEBOT_SMS_URL}${sep}apikey=${CALLMEBOT_API_KEY}&text=${encodeURIComponent(alert.message)}&to=${encodeURIComponent(toPhone)}`;
   try {
     const res = await fetch(url);
     if (!res.ok) {
       try { const t = await res.text(); console.error('CallMeBot SMS error', res.status, t); } catch (e) { console.error('CallMeBot SMS error', res.status); }
-      return false;
+      return { ok: false, provider: 'callmebot' };
     }
-    return true;
+    return { ok: true, provider: 'callmebot' };
   } catch (err) {
     console.error('CallMeBot SMS fetch failed', String(err));
-    return false;
+    return { ok: false, provider: 'callmebot', error: String(err) };
   }
 }
 
@@ -151,7 +154,8 @@ async function notifyByWhatsApp(alert, user) {
     try {
       const twilioSvc = await import('../services/twilioService.js').then(m => m.default || m);
       const res = await twilioSvc.sendWhatsApp(toPhone, alert.message).catch(() => null);
-      return Boolean(res && res.sid);
+      if (!res) return { ok: false, provider: 'twilio' };
+      return { ok: true, provider: 'twilio', providerRef: res.sid || null, raw: res };
     } catch (err) {
       console.error('Twilio WhatsApp send failed', String(err));
       // fall through to other providers
@@ -159,19 +163,19 @@ async function notifyByWhatsApp(alert, user) {
   }
 
   // Fallback to CallMeBot if configured
-  if (!CALLMEBOT_API_KEY || !CALLMEBOT_WHATSAPP_URL) return null;
+  if (!CALLMEBOT_API_KEY || !CALLMEBOT_WHATSAPP_URL) return { ok: false, provider: 'callmebot' };
   const sep = CALLMEBOT_WHATSAPP_URL.includes('?') ? '&' : '?';
   const url = `${CALLMEBOT_WHATSAPP_URL}${sep}apikey=${CALLMEBOT_API_KEY}&text=${encodeURIComponent(alert.message)}&to=${encodeURIComponent(toPhone)}`;
   try {
     const res = await fetch(url);
     if (!res.ok) {
       try { const t = await res.text(); console.error('CallMeBot WhatsApp error', res.status, t); } catch (e) { console.error('CallMeBot WhatsApp error', res.status); }
-      return false;
+      return { ok: false, provider: 'callmebot' };
     }
-    return true;
+    return { ok: true, provider: 'callmebot' };
   } catch (err) {
     console.error('CallMeBot WhatsApp fetch failed', String(err));
-    return false;
+    return { ok: false, provider: 'callmebot', error: String(err) };
   }
 }
 
@@ -197,9 +201,9 @@ async function notifyAll(alert, user) {
       if (!channels.includes('whatsapp')) channels.push('whatsapp');
     }
 
-  if (channels.includes('email')) results.email = await notifyByEmail(alert, user).catch(() => false);
-  if (channels.includes('sms')) results.sms = await notifyBySMS(alert, user).catch(() => false);
-  if (channels.includes('whatsapp')) results.whatsapp = await notifyByWhatsApp(alert, user).catch(() => false);
+  if (channels.includes('email')) results.email = await notifyByEmail(alert, user).catch(() => ({ ok: false, provider: 'unknown' }));
+  if (channels.includes('sms')) results.sms = await notifyBySMS(alert, user).catch(() => ({ ok: false, provider: 'unknown' }));
+  if (channels.includes('whatsapp')) results.whatsapp = await notifyByWhatsApp(alert, user).catch(() => ({ ok: false, provider: 'unknown' }));
 
   return results;
 }
