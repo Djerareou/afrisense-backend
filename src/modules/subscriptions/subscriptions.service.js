@@ -2,6 +2,7 @@
 import * as repo from './subscriptions.repository.js';
 import * as walletService from '../wallet/wallet.service.js';
 import { prisma } from '../../config/prismaClient.js';
+import { emit } from '../../core/events/index.js';
 
 /**
  * subscribe user to plan
@@ -31,33 +32,59 @@ export async function subscribeUser(userId, planKey) {
 export async function dailyChargeAll() {
   const activeSubs = await prisma.subscription.findMany({ where: { active: true }, include: { plan: true } });
   const results = [];
+
   for (const s of activeSubs) {
     try {
-      // check wallet
       const w = await walletService.createWalletIfNotExists(s.userId);
       if (w.frozen) {
-        // skip or log
         results.push({ subscriptionId: s.id, status: 'wallet_frozen' });
         continue;
       }
+
+      // If balance insufficient -> retry logic
       if (w.balance < s.plan.pricePerDay) {
-        // insufficient: suspend or set passive mode
-        await prisma.subscription.update({ where: { id: s.id }, data: { active: false } });
-        results.push({ subscriptionId: s.id, status: 'insufficient_funds' });
-        // Optionally create an Alert (integration)
+        const nextRetry = (s.retryCount || 0) + 1;
+        const updateData = { retryCount: nextRetry, lastRetryAt: new Date() };
+        // if we've exhausted retries, suspend subscription
+        if (nextRetry >= 3) {
+          updateData.active = false;
+          updateData.suspendedAt = new Date();
+          updateData.suspensionReason = 'insufficient_funds_after_retries';
+          results.push({ subscriptionId: s.id, status: 'suspended' });
+          await prisma.subscription.update({ where: { id: s.id }, data: updateData });
+          emit('SUBSCRIPTION_SUSPENDED', { userId: s.userId, subscription: { id: s.id }, reason: updateData.suspensionReason });
+        } else {
+          await prisma.subscription.update({ where: { id: s.id }, data: updateData });
+          results.push({ subscriptionId: s.id, status: 'insufficient_funds_retry', retry: nextRetry });
+        }
         continue;
       }
 
       // debit wallet
       await walletService.debit(s.userId, s.plan.pricePerDay, { reason: 'daily_subscription', subscriptionId: s.id });
 
-      // update lastChargedAt
-      await prisma.subscription.update({ where: { id: s.id }, data: { lastChargedAt: new Date() } });
-
+      // update lastChargedAt and reset retry counters
+      await prisma.subscription.update({ where: { id: s.id }, data: { lastChargedAt: new Date(), retryCount: 0, lastRetryAt: null } });
       results.push({ subscriptionId: s.id, status: 'charged' });
     } catch (err) {
       results.push({ subscriptionId: s.id, status: 'error', error: err.message });
     }
   }
+
   return results;
+}
+
+export async function reactivateSubscription(userId) {
+  const sub = await prisma.subscription.findFirst({ where: { userId } , include: { plan: true } });
+  if (!sub) throw new Error('Subscription not found');
+  if (!sub.active) {
+    const w = await walletService.createWalletIfNotExists(userId);
+    if (w.balance >= sub.plan.pricePerDay) {
+      const updated = await prisma.subscription.update({ where: { id: sub.id }, data: { active: true, suspendedAt: null, suspensionReason: null, retryCount: 0 } });
+      emit('SUBSCRIPTION_REACTIVATED', { userId, subscription: updated });
+      return updated;
+    }
+    throw new Error('Insufficient balance to reactivate');
+  }
+  return sub;
 }
