@@ -10,6 +10,9 @@ import positionsRoutes from './modules/positions/positions.routes.js';
 import geofenceRoutes from './modules/geofences/geofences.routes.js';
 import alertsRoutes from './modules/alerts/alerts.routes.js';
 import smsRoutes from './modules/sms/sms.routes.js';
+import walletRoutes from './modules/wallet/wallet.routes.js';
+import subscriptionRoutes from './modules/subscriptions/subscriptions.routes.js';
+import paymentRoutes from './modules/payments/payments.routes.js';
 
 import swaggerUi from 'swagger-ui-express';
 import { startAlertSchedulers } from './scheduler/alerts.scheduler.js';
@@ -46,5 +49,11 @@ try {
 } catch (err) {
 	console.error('Failed to start alert schedulers', err);
 }
+
+
+app.use('/api/wallet', walletRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/payments', paymentRoutes);
+
 
 export default app;
