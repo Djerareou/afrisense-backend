@@ -42,7 +42,6 @@ enum NotificationChannel {
   WEBHOOK
 }
 
-
 // -----------------------------------------------------------------------------
 // USER / AUTH / ENTITIES
 // -----------------------------------------------------------------------------
@@ -60,13 +59,12 @@ model User {
   trackers      Tracker[]
   subscriptions Subscription[]
   wallet        Wallet?
-  payments      Payment[]
+  payments      PaymentRecord[]
   geofences     Geofence[]
   alerts        Alert[]
   vehicles      Vehicle[]
   alertSettings AlertSetting[]
 }
-
 
 // -----------------------------------------------------------------------------
 // VEHICLE / TRACKER / ASSIGNMENTS
@@ -125,7 +123,6 @@ model TrackerAssignment {
   vehicle Vehicle @relation(fields: [vehicleId], references: [id])
 }
 
-
 // -----------------------------------------------------------------------------
 // POSITIONS
 // -----------------------------------------------------------------------------
@@ -154,7 +151,6 @@ model Position {
 
   @@index([trackerId, timestamp])
 }
-
 
 // -----------------------------------------------------------------------------
 // ALERTS & NOTIFICATIONS
@@ -215,7 +211,6 @@ model AlertDeliveryLog {
   @@index([channel, status])
 }
 
-
 // -----------------------------------------------------------------------------
 // TRACKER COMMAND LOGS
 // -----------------------------------------------------------------------------
@@ -231,57 +226,78 @@ model TrackerConfigLog {
   tracker Tracker @relation(fields: [trackerId], references: [id])
 }
 
+// -----------------------------------------------------------------------------
+// FINTECH / BILLING Subscription / Wallet / Payment models
+// -----------------------------------------------------------------------------
 
-// -----------------------------------------------------------------------------
-// FINTECH / BILLING
-// -----------------------------------------------------------------------------
+model Plan {
+  id          String   @id @default(uuid())
+  key         String   @unique                 // "starter", "pro", "premium"
+  name        String
+  description String?
+  pricePerDay Float    // en FCFA (ou unité choisie)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  subscriptions Subscription[]
+}
 
 model Wallet {
-  id          String               @id @default(uuid())
-  userId      String               @unique
-  balance     Float                @default(0)
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  balance   Float    @default(0)
+  frozen    Boolean  @default(false) // freeze for anti-fraud
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user        User                 @relation(fields: [userId], references: [id])
+  user         User               @relation(fields: [userId], references: [id])
   transactions WalletTransaction[]
 }
 
 model WalletTransaction {
   id          String   @id @default(uuid())
   walletId    String
-  type        String   // "debit" | "credit"
+  type        String   // TOPUP | DEBIT | TRANSFER_IN | TRANSFER_OUT | REFUND
   amount      Float
-  description String?
-  meta        Json?
+  currency    String   @default("XAF")
+  metadata    Json?    // free data (reason, externalRef, paymentId)
   createdAt   DateTime @default(now())
 
   wallet Wallet @relation(fields: [walletId], references: [id])
+  @@index([walletId, createdAt])
+}
+
+model PaymentRecord {
+  id          String   @id @default(uuid())
+  userId      String
+  amount      Float
+  currency    String   @default("XAF")
+  method      String   // "simulated_mobile_money", "simulated_card", "real_provider"
+  status      String   // pending, success, failure
+  providerRef String?  // external provider id if any
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  @@index([userId, createdAt])
 }
 
 model Subscription {
-  id        String   @id @default(uuid())
-  userId    String
-  plan      String   // Starter | Pro | Premium
-  status    String   // active | inactive | trial
-  startDate DateTime
-  endDate   DateTime
-  autoRenew Boolean  @default(true)
+  id         String   @id @default(uuid())
+  userId     String
+  planId     String
+  active     Boolean  @default(true)
+  startDate  DateTime @default(now())
+  endDate    DateTime? // optional expiry
+  lastChargedAt DateTime? // last successful daily charge
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id])
+  plan Plan @relation(fields: [planId], references: [id])
+  @@index([userId])
+  @@index([planId])
 }
-
-model Payment {
-  id        String   @id @default(uuid())
-  userId    String
-  amount    Float
-  currency  String
-  method    String
-  timestamp DateTime
-
-  user User @relation(fields: [userId], references: [id])
-}
-
 
 // -----------------------------------------------------------------------------
 // GEOFENCES & EVENTS
@@ -323,4 +339,3 @@ model GeofenceEvent {
   @@index([trackerId, timestamp])
   @@index([geofenceId, timestamp])
 }
-
