@@ -16,6 +16,7 @@ import paymentRoutes from './modules/payments/payments.routes.js';
 
 import swaggerUi from 'swagger-ui-express';
 import { startAlertSchedulers } from './scheduler/alerts.scheduler.js';
+import { errorHandler } from './core/errors.js';
 
 // Charger OpenAPI
 const openapiPath = path.join(process.cwd(), 'src', 'docs', 'openapi.json');
@@ -54,6 +55,9 @@ try {
 app.use('/api/wallet', walletRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/payments', paymentRoutes);
+
+// Global error handler (should be after all routes)
+app.use(errorHandler);
 
 
 export default app;

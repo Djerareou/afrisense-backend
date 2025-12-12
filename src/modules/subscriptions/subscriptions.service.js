@@ -3,6 +3,7 @@ import * as repo from './subscriptions.repository.js';
 import * as walletService from '../wallet/wallet.service.js';
 import { prisma } from '../../config/prismaClient.js';
 import { emit } from '../../core/events/index.js';
+import cache from '../../core/cache.js';
 
 /**
  * subscribe user to plan
@@ -18,6 +19,40 @@ export async function subscribeUser(userId, planKey) {
     sub = await repo.updateSubscription(userId, { planId: plan.id, active: true });
   }
   return sub;
+}
+
+export async function listPlansCached() {
+  const cacheKey = 'plans:all';
+  const cached = await cache.cacheGet(cacheKey);
+  if (cached) return cached;
+  const plans = await repo.listPlans();
+  await cache.cacheSet(cacheKey, plans, 60 * 60 * 24); // 24h
+  return plans;
+}
+
+export async function prepaySubscription(userId, days, planKey = null) {
+  const sub = await repo.findSubscriptionByUser(userId);
+  const plan = planKey ? await repo.findPlanByKey(planKey) : (sub ? await repo.findPlanById(sub.planId) : null);
+  if (!plan) throw new Error('Plan not found');
+  const cost = plan.pricePerDay * days;
+  // bonus: if paying 30 or more days, give 5% extra days
+  let bonusDays = 0;
+  if (days >= 30) bonusDays = Math.floor(days * 0.05);
+  // attempt to debit wallet
+  await walletService.debit(userId, cost, { reason: 'prepay_subscription', days, planId: plan.id });
+
+  const prepaidUntil = new Date();
+  prepaidUntil.setDate(prepaidUntil.getDate() + days + bonusDays);
+
+  if (!sub) {
+    // create subscription with prepaidUntil
+    const created = await repo.createSubscription(userId, plan.id);
+    await repo.updateSubscription(userId, { prepaidUntil });
+    return { subscription: created, prepaidUntil };
+  }
+
+  const updated = await repo.updateSubscription(userId, { prepaidUntil });
+  return { subscription: updated, prepaidUntil };
 }
 
 /**

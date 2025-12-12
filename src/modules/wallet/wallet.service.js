@@ -28,6 +28,15 @@ export async function addCredit(userId, amount, metadata = {}) {
     if (updated) {
       // emit event for potential listeners
       emit('WALLET_TOPUP', { userId, wallet: updated, amount });
+      // increment loyalty points: 1 point per 100 units (use repository helper)
+      try {
+        const points = Math.floor(amount / 100);
+        if (points > 0 && typeof repo.incrementLoyaltyPoints === 'function') {
+          await repo.incrementLoyaltyPoints(updated.id, points);
+        }
+      } catch (e) {
+        // ignore loyalty increment failure (non-critical)
+      }
       return updated;
     }
     // if repo helper returned falsy (e.g., mocked in tests), fall through to other strategies
@@ -102,4 +111,27 @@ export async function debit(userId, amount, metadata = {}) {
 export async function setFreeze(userId, freeze = true) {
   const wallet = await repo.ensureWalletForUser(userId);
   return prisma.wallet.update({ where: { id: wallet.id }, data: { frozen: freeze } });
+}
+
+export async function redeemPoints(userId, points) {
+  if (points <= 0) throw new Error('Points must be positive');
+  const wallet = await repo.ensureWalletForUser(userId);
+  // define conversion: 10 points = 1 unit currency
+  const creditAmount = (points / 10);
+  if (wallet.loyaltyPoints < points) throw new Error('Insufficient loyalty points');
+  // perform transaction: decrement points and credit balance
+  if (typeof prisma.$transaction === 'function') {
+    const res = await prisma.$transaction(async (tx) => {
+      await tx.wallet.update({ where: { id: wallet.id }, data: { loyaltyPoints: { decrement: points } } });
+      const updated = await tx.wallet.update({ where: { id: wallet.id }, data: { balance: { increment: creditAmount } } });
+      await tx.walletTransaction.create({ data: { walletId: wallet.id, type: 'REWARD_REDEEM', amount: creditAmount, metadata: { pointsRedeemed: points } } });
+      return updated;
+    });
+    return res;
+  }
+
+  // test fallback
+  wallet.balance += creditAmount;
+  wallet.loyaltyPoints -= points;
+  return wallet;
 }

@@ -8,5 +8,7 @@ router.use(authMiddleware);
 
 router.get('/plans', ctrl.listPlansController);
 router.post('/subscribe', ctrl.subscribeController);
+router.get('/me/status', ctrl.statusController);
+router.post('/me/prepay', ...ctrl.prepayController);
 
 export default router;

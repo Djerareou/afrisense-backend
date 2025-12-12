@@ -63,3 +63,7 @@ export async function creditWithTransaction(walletId, amount, metadata = null) {
     return updated;
   });
 }
+
+export async function incrementLoyaltyPoints(walletId, points) {
+  return prisma.wallet.update({ where: { id: walletId }, data: { loyaltyPoints: { increment: points } } });
+}

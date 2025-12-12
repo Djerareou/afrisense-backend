@@ -53,3 +53,14 @@ export async function freezeController(req, res) {
     return res.status(400).json({ success: false, error: err.message });
   }
 }
+
+export async function redeemPointsController(req, res, next) {
+  try {
+    const userId = req.user.userId;
+    const { points } = req.body;
+    const result = await service.redeemPoints(userId, Number(points));
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    return next(err);
+  }
+}

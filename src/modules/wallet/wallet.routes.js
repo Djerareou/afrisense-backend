@@ -13,6 +13,7 @@ router.get('/me/balance', ctrl.getBalanceController);
 router.post('/me/credit', ctrl.addCreditController);
 router.post('/me/debit', ctrl.debitController);
 router.post('/me/freeze', ctrl.freezeController);
+router.post('/me/redeem', ctrl.redeemPointsController);
 
 // admin endpoints could be added (create for user, adjust balance)
 
