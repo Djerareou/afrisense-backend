@@ -1,6 +1,6 @@
 // src/jobs/subscriptionCron.js
 import cron from 'node-cron';
-import { dailyChargeAll } from '../modules/subscriptions/subscription.service.js';
+import { dailyChargeAll } from '../modules/subscriptions/subscriptions.service.js';
 import pino from 'pino';
 const logger = pino();
 

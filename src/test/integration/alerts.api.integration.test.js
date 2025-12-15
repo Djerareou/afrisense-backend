@@ -2,7 +2,14 @@ import request from 'supertest';
 import app from '../../app.js';
 import { prisma } from '../../config/prismaClient.js';
 
-jest.mock('../../config/prismaClient.js');
+jest.mock('../../config/prismaClient.js', () => ({
+  prisma: {
+    tracker: {},
+    alertSetting: {},
+    alert: {},
+    alertDeliveryLog: {},
+  }
+}));
 
 beforeEach(() => jest.resetAllMocks());
 

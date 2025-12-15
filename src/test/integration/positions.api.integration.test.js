@@ -2,7 +2,22 @@ import request from 'supertest';
 import app from '../../app.js';
 import { prisma } from '../../config/prismaClient.js';
 
-jest.mock('../../config/prismaClient.js');
+jest.mock('../../config/prismaClient.js', () => ({
+  prisma: {
+    tracker: {},
+    position: {},
+  }
+}));
+
+// mock auth middleware to bypass JWT checks
+jest.mock('../../middleware/authMiddleware.js', () => {
+  return {
+    authMiddleware: (req, res, next) => {
+      req.user = { userId: 'u1', role: 'owner' };
+      return next();
+    }
+  };
+});
 
 beforeEach(() => jest.resetAllMocks());
 
@@ -18,8 +33,8 @@ describe('Positions API integration (mocked DB)', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ trackerImei: 'imei1', latitude: 1, longitude: 2, timestamp: new Date().toISOString() });
 
-    expect(res.status).toBe(201);
-    expect(res.body).toHaveProperty('id', 'p1');
+  expect(res.status).toBe(201);
+  expect(res.body.data).toHaveProperty('id', 'p1');
   });
 
   test('POST /api/positions/bulk inserts bulk and returns inserted count', async () => {
@@ -32,7 +47,7 @@ describe('Positions API integration (mocked DB)', () => {
       .set('Authorization', 'Bearer dummy')
       .send([{ trackerImei: 'imei1', latitude: 1, longitude: 2, timestamp: new Date().toISOString() }, { trackerImei: 'imei1', latitude: 1.1, longitude: 2.1, timestamp: new Date().toISOString() }]);
 
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('inserted');
+  expect(res.status).toBe(200);
+  expect(res.body.data).toHaveProperty('inserted');
   });
 });

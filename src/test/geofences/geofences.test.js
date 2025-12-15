@@ -10,20 +10,20 @@
 import {
   pointInCircle,
   pointInPolygon
-} from "../src/modules/geofences/geofences.utils.js";
+} from "../../modules/geofences/geofences.utils.js";
 
 import {
   detectAndPersistGeofenceTransitions
-} from "../src/modules/geofences/geofences.events.js";
+} from "../../modules/geofences/geofences.events.js";
 
 // Mock du repository
-jest.mock("../src/modules/geofences/geofences.repository.js", () => ({
+jest.mock("../../modules/geofences/geofences.repository.js", () => ({
   findGeofencesForTracker: jest.fn(),
   lastGeofenceEventForTrackerAndFence: jest.fn(),
   createGeofenceEvent: jest.fn(),
 }));
 
-import * as repo from "../src/modules/geofences/geofences.repository.js";
+import * as repo from "../../modules/geofences/geofences.repository.js";
 
 /* ------------------------------------------------------------
  * 1) Tests Geometry

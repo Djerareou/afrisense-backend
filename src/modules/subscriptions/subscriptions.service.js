@@ -14,7 +14,19 @@ export async function subscribeUser(userId, planKey) {
   // create subscription if not exists
   let sub = await repo.findSubscriptionByUser(userId);
   if (!sub) {
-    sub = await repo.createSubscription(userId, plan.id);
+    // compute trial end date if plan provides a free trial
+    let trialEndsAt = null;
+    try {
+      const freeDays = typeof plan.freeTrialDays === 'number' ? plan.freeTrialDays : (plan.freeTrialDays ? Number(plan.freeTrialDays) : 0);
+      if (freeDays && freeDays > 0) {
+        trialEndsAt = new Date();
+        trialEndsAt.setDate(trialEndsAt.getDate() + freeDays);
+      }
+    } catch (e) {
+      trialEndsAt = null;
+    }
+
+    sub = await repo.createSubscription(userId, plan.id, new Date(), trialEndsAt);
   } else {
     sub = await repo.updateSubscription(userId, { planId: plan.id, active: true });
   }
@@ -70,6 +82,11 @@ export async function dailyChargeAll() {
 
   for (const s of activeSubs) {
     try {
+      // If the subscription is currently in a free trial period, skip charging
+      if (s.trialEndsAt && new Date() < new Date(s.trialEndsAt)) {
+        results.push({ subscriptionId: s.id, status: 'in_trial' });
+        continue;
+      }
       const w = await walletService.createWalletIfNotExists(s.userId);
       if (w.frozen) {
         results.push({ subscriptionId: s.id, status: 'wallet_frozen' });
@@ -78,6 +95,10 @@ export async function dailyChargeAll() {
 
       // If balance insufficient -> retry logic
       if (w.balance < s.plan.pricePerDay) {
+        // emit DEBIT_FAILED so auto-topup jobs/listeners can react
+        try {
+          emit('DEBIT_FAILED', { userId: s.userId, wallet: w, amount: s.plan.pricePerDay, reason: 'insufficient_funds' });
+        } catch (e) {}
         const nextRetry = (s.retryCount || 0) + 1;
         const updateData = { retryCount: nextRetry, lastRetryAt: new Date() };
         // if we've exhausted retries, suspend subscription

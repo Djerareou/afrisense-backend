@@ -13,6 +13,7 @@ import smsRoutes from './modules/sms/sms.routes.js';
 import walletRoutes from './modules/wallet/wallet.routes.js';
 import subscriptionRoutes from './modules/subscriptions/subscriptions.routes.js';
 import paymentRoutes from './modules/payments/payments.routes.js';
+import fwRoutes from './modules/payments/flutterwave.controller.js';
 
 import swaggerUi from 'swagger-ui-express';
 import { startAlertSchedulers } from './scheduler/alerts.scheduler.js';
@@ -44,17 +45,29 @@ app.use('/webhooks/sms', smsRoutes); // SMS webhook
 // Swagger UI
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapi));
 
-// Start background schedulers (alerts)
-try {
-	startAlertSchedulers();
-} catch (err) {
-	console.error('Failed to start alert schedulers', err);
+// Start background schedulers (alerts) unless tests or explicit disable
+// Only start schedulers when explicitly enabled to avoid background jobs during tests or CI.
+// Set ENABLE_SCHEDULERS=true to turn them on in dev or production.
+if (process.env.ENABLE_SCHEDULERS === 'true') {
+	try {
+		startAlertSchedulers();
+	} catch (err) {
+		console.error('Failed to start alert schedulers', err);
+	}
+} else {
+	// Schedulers are disabled by default (tests and CI). Use ENABLE_SCHEDULERS=true to enable.
 }
+
+// (auto-topup and notification listeners disabled for MVP)
 
 
 app.use('/api/wallet', walletRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/payments', paymentRoutes);
+// Flutterwave provider endpoints (init + webhook)
+app.use('/api/payments/flutterwave', fwRoutes);
+// Also expose webhook endpoint at the common webhook path used by tests and some providers
+app.use('/webhooks/payments/flutterwave', fwRoutes);
 
 // Global error handler (should be after all routes)
 app.use(errorHandler);

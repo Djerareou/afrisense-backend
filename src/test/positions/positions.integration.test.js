@@ -1,16 +1,18 @@
 // tests/positions/positions.integration.test.js
 import request from 'supertest';
-import app from '../../src/app.js';
-import { prisma } from '../../src/config/prismaClient.js';
+import app from '../../app.js';
+import { prisma } from '../../config/prismaClient.js';
 
-jest.mock('../../src/config/prismaClient.js', () => ({
-  tracker: { findUnique: jest.fn() },
-  position: { findFirst: jest.fn(), create: jest.fn(), findMany: jest.fn() },
-  $transaction: jest.fn(),
+jest.mock('../../config/prismaClient.js', () => ({
+  prisma: {
+    tracker: { findUnique: jest.fn() },
+    position: { findFirst: jest.fn(), create: jest.fn(), findMany: jest.fn() },
+    $transaction: jest.fn(),
+  }
 }));
 
 // mock auth middleware to set req.user
-jest.mock('../../src/middleware/authMiddleware.js', () => {
+jest.mock('../../middleware/authMiddleware.js', () => {
   return {
     authMiddleware: (req, res, next) => {
       req.user = { userId: 'u1', role: 'owner' };

@@ -34,7 +34,8 @@ export async function statusController(req, res) {
     const plan = await repo.findPlanById(sub.planId);
     const balance = await (await import('../wallet/wallet.service.js')).getBalance(userId);
     const estimatedDaysLeft = plan && plan.pricePerDay ? Math.floor(balance / plan.pricePerDay) : null;
-    return res.json({ success: true, data: { balance, plan, costPerDay: plan?.pricePerDay, estimatedDaysLeft } });
+    const inTrial = !!(sub.trialEndsAt && new Date() < new Date(sub.trialEndsAt));
+    return res.json({ success: true, data: { balance, plan, costPerDay: plan?.pricePerDay, estimatedDaysLeft, trialEndsAt: sub.trialEndsAt || null, inTrial } });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

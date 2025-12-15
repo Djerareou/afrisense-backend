@@ -1,12 +1,14 @@
 // tests/positions/positions.unit.test.js
-import { positionSchema } from '../../src/modules/positions/positions.schema.js';
-import { ingestPosition } from '../../src/modules/positions/positions.service.js';
-import { prisma } from '../../src/config/prismaClient.js';
+import { positionSchema } from '../../modules/positions/positions.schema.js';
+import { ingestPosition } from '../../modules/positions/positions.service.js';
+import { prisma } from '../../config/prismaClient.js';
 
-jest.mock('../../src/config/prismaClient.js', () => ({
-  tracker: { findUnique: jest.fn() },
-  position: { findFirst: jest.fn(), create: jest.fn(), findMany: jest.fn() },
-  $transaction: jest.fn(),
+jest.mock('../../config/prismaClient.js', () => ({
+  prisma: {
+    tracker: { findUnique: jest.fn() },
+    position: { findFirst: jest.fn(), create: jest.fn(), findMany: jest.fn() },
+    $transaction: jest.fn(),
+  }
 }));
 
 describe('Positions unit tests', () => {

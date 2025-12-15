@@ -11,6 +11,7 @@ router.use(authMiddleware);
 router.post('/me', ctrl.createWalletController);
 router.get('/me/balance', ctrl.getBalanceController);
 router.post('/me/credit', ctrl.addCreditController);
+router.post('/me/topup', ctrl.createTopupLinkController);
 router.post('/me/debit', ctrl.debitController);
 router.post('/me/freeze', ctrl.freezeController);
 router.post('/me/redeem', ctrl.redeemPointsController);
