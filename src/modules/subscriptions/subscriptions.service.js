@@ -151,3 +151,22 @@ export async function reactivateSubscription(userId) {
   }
   return sub;
 }
+
+export async function changeUserPlan(userId, planKey) {
+  const plan = await prisma.plan.findUnique({ where: { key: planKey } });
+  if (!plan) throw new Error('Plan not found');
+
+  const freeDays = typeof plan.freeTrialDays === 'number' ? plan.freeTrialDays : 3;
+  const trialEndsAt = new Date();
+  trialEndsAt.setDate(trialEndsAt.getDate() + freeDays);
+
+  let sub = await prisma.subscription.findFirst({ where: { userId } });
+  if (!sub) {
+    sub = await prisma.subscription.create({ data: { userId, planId: plan.id, active: true, startDate: new Date(), trialEndsAt } });
+    return sub;
+  }
+
+  const updated = await prisma.subscription.update({ where: { id: sub.id }, data: { planId: plan.id, active: true, trialEndsAt, retryCount: 0, suspendedAt: null, suspensionReason: null } });
+  emit('SUBSCRIPTION_PLAN_CHANGED', { userId, subscription: updated });
+  return updated;
+}

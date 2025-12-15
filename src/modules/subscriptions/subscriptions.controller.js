@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { validateBody } from '../../middleware/validate.js';
 
 const prepaySchema = z.object({ planKey: z.string().optional(), days: z.number().int().positive() });
+const changePlanSchema = z.object({ planKey: z.string() });
 
 export async function listPlansController(req, res) {
   try {
@@ -25,6 +26,17 @@ export async function subscribeController(req, res) {
     return res.status(400).json({ success: false, error: err.message });
   }
 }
+
+export const changePlanController = [validateBody(changePlanSchema), async function (req, res) {
+  try {
+    const userId = req.user.userId;
+    const { planKey } = req.body;
+    const sub = await service.changeUserPlan(userId, planKey);
+    return res.json({ success: true, data: sub });
+  } catch (err) {
+    return res.status(400).json({ success: false, error: err.message });
+  }
+}];
 
 export async function statusController(req, res) {
   try {
