@@ -5,7 +5,6 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 /**
@@ -235,11 +234,12 @@ model TrackerConfigLog {
  */
 
 model Plan {
-  id         String   @id @default(uuid())
-  name       String   @unique
-  dailyPrice Int
-  trialDays  Int
-  createdAt  DateTime @default(now())
+  id           String   @id @default(uuid())
+  key          String?  @unique
+  name         String
+  pricePerDay   Int?
+  freeTrialDays Int?
+  createdAt    DateTime @default(now())
   subscriptions Subscription[]
 }
 
@@ -247,9 +247,15 @@ model Subscription {
   id            String   @id @default(uuid())
   userId        String   @unique
   planId        String
-  status        String   // TRIAL | ACTIVE | SUSPENDED
+  active        Boolean  @default(true)
+  startDate     DateTime?
   trialEndsAt   DateTime?
   lastChargedAt DateTime?
+  retryCount    Int      @default(0)
+  lastRetryAt   DateTime?
+  suspendedAt   DateTime?
+  suspensionReason String?
+  prepaidUntil  DateTime?
   createdAt     DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
