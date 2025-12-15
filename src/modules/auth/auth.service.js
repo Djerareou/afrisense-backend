@@ -6,7 +6,7 @@ import { auditLog } from './audit.service.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecret';
 
-export const registerUser = async ({ fullName, email, phone, password, role }) => {
+export const registerUser = async ({ fullName, email, phone, password, role, planName }) => {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw new Error(AuthMessages.EMAIL_ALREADY_EXISTS);
 
@@ -14,6 +14,32 @@ export const registerUser = async ({ fullName, email, phone, password, role }) =
   const user = await prisma.user.create({
     data: { fullName, email, phone, passwordHash: hash, role }
   });
+
+  // Create a subscription in TRIAL for 3 days for the chosen plan (default: STARTER)
+  try {
+    const chosenPlanName = planName && typeof planName === 'string' ? planName.toUpperCase() : 'STARTER';
+    let plan = await prisma.plan.findUnique({ where: { name: chosenPlanName } });
+    if (!plan) {
+      // fallback to STARTER if chosen plan not found
+      plan = await prisma.plan.findUnique({ where: { name: 'STARTER' } });
+    }
+
+    const trialEndsAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // 3 days from now
+
+    if (plan) {
+      await prisma.subscription.create({
+        data: {
+          userId: user.id,
+          planId: plan.id,
+          status: 'TRIAL',
+          trialEndsAt
+        }
+      });
+    }
+  } catch (err) {
+    // don't block user registration if subscription creation fails; just log the error via audit
+    await auditLog({ userId: user.id, action: 'SUBSCRIPTION_CREATE', status: 'FAILURE' });
+  }
 
   await auditLog({ userId: user.id, action: 'REGISTER', status: 'SUCCESS' });
   return { id: user.id, fullName, email, role };

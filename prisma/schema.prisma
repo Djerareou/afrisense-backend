@@ -1,0 +1,308 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/**
+ * ---------------------- USERS ----------------------
+ */
+
+model User {
+  id           String   @id @default(uuid())
+  fullName     String
+  email        String   @unique
+  phone        String?
+  role         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  trackers      Tracker[]
+  subscriptions Subscription[]
+  payments      Payment[]
+  geofences     Geofence[]
+  alerts        Alert[]
+  vehicles      Vehicle[]
+
+  alertSettings AlertSetting[] // ajout pour la relation
+}
+
+/**
+ * ---------------------- VEHICLES ----------------------
+ */
+
+model Vehicle {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  type      String // car, moto, truck, asset, etc.
+  brand     String?
+  model     String?
+  plate     String?  @unique
+  createdAt DateTime @default(now())
+
+  user        User                @relation(fields: [userId], references: [id])
+  assignments TrackerAssignment[]
+}
+
+/**
+ * ---------------------- TRACKERS ----------------------
+ */
+
+model Tracker {
+  id                String    @id @default(uuid())
+  imei              String    @unique
+  label             String?
+  model             String
+  protocol          String // gt06, osmand, traccar, custom
+  simNumber         String?
+  iccid             String? // SIM ID
+  apn               String?
+  ipServer          String?
+  port              Int?
+  status            String // active, inactive, installed, lost
+  batteryLevel      Float?
+  lastCommunication DateTime?
+  isDeleted         Boolean   @default(false)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  // relations
+  positions      Position[]
+  alerts         Alert[]
+  assignments    TrackerAssignment[]
+  configLogs     TrackerConfigLog[]
+  geofences      Geofence[]          @relation("TrackerGeofences")
+  geofenceEvents GeofenceEvent[]
+}
+
+/**
+ * ---------- HISTORIQUE DES AFFECTATIONS TRACKER → VEHICLE ----------
+ */
+
+model TrackerAssignment {
+  id         String    @id @default(uuid())
+  trackerId  String
+  vehicleId  String
+  assignedAt DateTime  @default(now())
+  removedAt  DateTime?
+
+  tracker Tracker @relation(fields: [trackerId], references: [id])
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id])
+}
+
+/**
+ * ---------------------- POSITIONS GPS ----------------------
+ */
+
+model Position {
+  id           String                               @id @default(uuid())
+  trackerId    String
+  latitude     Float
+  longitude    Float
+  speed        Float?
+  direction    Float?
+  altitude     Float?
+  eventType    String?
+  batteryLevel Float?
+  externalId   String?                              @unique
+  odometer     Float?
+  accuracy     Float?
+  source       String?
+  createdAt    DateTime                             @default(now())
+  timestamp    DateTime
+  // PostGIS geometry column for spatial queries. Exposed as Unsupported so Prisma client can still be generated.
+  location     Unsupported("geometry(Point,4326)")?
+
+  tracker        Tracker         @relation(fields: [trackerId], references: [id])
+  geofenceEvents GeofenceEvent[]
+  // For PostGIS geometry (optional)
+  // location Unsupported("geometry")
+
+  @@index([trackerId, timestamp])
+}
+
+/**
+ * ---------------------- ALERTES ----------------------
+ */
+
+/// ===== ENUMS (optionnels mais recommandés) =====
+enum AlertType {
+  GEOFENCE_ENTER
+  GEOFENCE_EXIT
+  BATTERY_LOW
+  OFFLINE
+  SOS
+  OVERSPEED
+  VIBRATION
+  CUSTOM
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum NotificationChannel {
+  CONSOLE
+  EMAIL
+  SMS
+  PUSH
+  WEBHOOK
+}
+
+/// ===== ALERT (améliorée) =====
+model Alert {
+  id          String        @id @default(uuid())
+  trackerId   String?
+  userId      String? // l'alerte peut être globale (userId null) ou ciblée
+  type        AlertType // event type (enum)
+  title       String? // court résumé/label
+  message     String // message complet (texte)
+  severity    AlertSeverity // importance
+  metadata    Json? // JSON libre (ex: speed, distance, geofenceId)
+  status      String        @default("new") // new, sent, acknowledged, dismissed
+  createdAt   DateTime      @default(now())
+  deliveredAt DateTime?
+
+  // relations
+  tracker      Tracker?           @relation(fields: [trackerId], references: [id])
+  user         User?              @relation(fields: [userId], references: [id])
+  deliveryLogs AlertDeliveryLog[] // ajout pour la relation
+
+  // indexes pour recherches rapides
+  @@index([userId, createdAt])
+  @@index([trackerId, createdAt])
+  @@index([type, createdAt])
+}
+
+/// ===== ALERT SETTINGS (préférences utilisateur) =====
+model AlertSetting {
+  id         String   @id @default(uuid())
+  userId     String
+  enabled    Boolean  @default(true)
+  channels   Json // ex: { "email": true, "sms": false, "push": true }
+  thresholds Json? // ex: { "overspeed": 100, "battery_low": 15 }
+  timezone   String? // préférence timezone pour timestamps
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId]) // 1 param set par user
+}
+
+/// ===== ALERT DELIVERY LOG (traçabilité d'envoi) =====
+model AlertDeliveryLog {
+  id          String              @id @default(uuid())
+  alertId     String
+  channel     NotificationChannel
+  status      String // pending, success, failure
+  providerRef String? // id renvoyé par le provider (ex: twilio id)
+  error       String? // message d'erreur si échec
+  attemptedAt DateTime            @default(now())
+  processedAt DateTime?
+
+  alert Alert @relation(fields: [alertId], references: [id])
+
+  @@index([alertId])
+  @@index([channel, status])
+}
+
+/**
+ * ---------- LOGS DES COMMANDES ET CONFIGURATIONS TRACKER ----------
+ */
+
+model TrackerConfigLog {
+  id        String   @id @default(uuid())
+  trackerId String
+  command   String // ex: "SET_IP 102.12.12.14 5010"
+  status    String // success, pending, failed
+  response  String?
+  createdAt DateTime @default(now())
+
+  tracker Tracker @relation(fields: [trackerId], references: [id])
+}
+
+/**
+ * ---------------------- FINTECH MODULE ----------------------
+ */
+
+model Plan {
+  id         String   @id @default(uuid())
+  name       String   @unique
+  dailyPrice Int
+  trialDays  Int
+  createdAt  DateTime @default(now())
+}
+
+model Subscription {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  planId        String
+  status        String   // TRIAL | ACTIVE | SUSPENDED
+  trialEndsAt   DateTime?
+  lastChargedAt DateTime?
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  plan Plan @relation(fields: [planId], references: [id])
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  userId    String
+  amount    Float
+  currency  String
+  method    String
+  timestamp DateTime
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+/**
+ * ---------------------- GEOFENCES ----------------------
+ */
+
+model Geofence {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  type        String // "circle" ou "polygon"
+  radius      Float?
+  center      Json?
+  coordinates Json? // pour polygon
+  color       String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  trackers       Tracker[]       @relation("TrackerGeofences")
+  geofenceEvents GeofenceEvent[]
+  user           User            @relation(fields: [userId], references: [id])
+  userId         String
+}
+
+/// ===== GEOFENCE EVENT (positionId obligatoire) =====
+model GeofenceEvent {
+  id         String   @id @default(uuid())
+  trackerId  String
+  geofenceId String
+  type       String // "enter" | "exit"
+  timestamp  DateTime @default(now())
+  positionId String // OBLIGATOIRE : FK vers Position
+  meta       Json? // optionnel : distance, speed, etc.
+  createdAt  DateTime @default(now())
+
+  tracker  Tracker  @relation(fields: [trackerId], references: [id])
+  geofence Geofence @relation(fields: [geofenceId], references: [id])
+  position Position @relation(fields: [positionId], references: [id])
+
+  @@index([trackerId, timestamp])
+  @@index([geofenceId, timestamp])
+}
