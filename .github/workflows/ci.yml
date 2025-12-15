@@ -11,7 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:15
+        # Use PostGIS-enabled image so migrations that create geometry types/extensions succeed in CI
+        image: postgis/postgis:15-3.4
         env:
           POSTGRES_DB: afrisense_test
           POSTGRES_USER: postgres
