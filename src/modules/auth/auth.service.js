@@ -17,21 +17,25 @@ export const registerUser = async ({ fullName, email, phone, password, role, pla
 
   // Create a subscription in TRIAL for 3 days for the chosen plan (default: STARTER)
   try {
-    const chosenPlanName = planName && typeof planName === 'string' ? planName.toUpperCase() : 'STARTER';
-    let plan = await prisma.plan.findUnique({ where: { name: chosenPlanName } });
+    const chosenPlanKey = planName && typeof planName === 'string' ? planName.toUpperCase() : 'STARTER';
+    let plan = await prisma.plan.findUnique({ where: { key: chosenPlanKey } });
     if (!plan) {
       // fallback to STARTER if chosen plan not found
-      plan = await prisma.plan.findUnique({ where: { name: 'STARTER' } });
+      plan = await prisma.plan.findUnique({ where: { key: 'STARTER' } });
     }
 
-    const trialEndsAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // 3 days from now
+    // compute trialEndsAt based on plan.freeTrialDays (default to 3 if not set)
+    const freeDays = plan && typeof plan.freeTrialDays === 'number' ? plan.freeTrialDays : 3;
+    const trialEndsAt = new Date();
+    trialEndsAt.setDate(trialEndsAt.getDate() + freeDays);
 
     if (plan) {
       await prisma.subscription.create({
         data: {
           userId: user.id,
           planId: plan.id,
-          status: 'TRIAL',
+          active: true,
+          startDate: new Date(),
           trialEndsAt
         }
       });
