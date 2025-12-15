@@ -87,6 +87,13 @@ export async function dailyChargeAll() {
         results.push({ subscriptionId: s.id, status: 'in_trial' });
         continue;
       }
+
+      // Determine plan price (if plan has no price or price is 0, nothing to charge)
+      const planPrice = s.plan && typeof s.plan.pricePerDay === 'number' ? s.plan.pricePerDay : 0;
+      if (!planPrice || planPrice <= 0) {
+        results.push({ subscriptionId: s.id, status: 'free_plan' });
+        continue;
+      }
       const w = await walletService.createWalletIfNotExists(s.userId);
       if (w.frozen) {
         results.push({ subscriptionId: s.id, status: 'wallet_frozen' });
@@ -94,10 +101,10 @@ export async function dailyChargeAll() {
       }
 
       // If balance insufficient -> retry logic
-      if (w.balance < s.plan.pricePerDay) {
+      if (w.balance < planPrice) {
         // emit DEBIT_FAILED so auto-topup jobs/listeners can react
         try {
-          emit('DEBIT_FAILED', { userId: s.userId, wallet: w, amount: s.plan.pricePerDay, reason: 'insufficient_funds' });
+          emit('DEBIT_FAILED', { userId: s.userId, wallet: w, amount: planPrice, reason: 'insufficient_funds' });
         } catch (e) {}
         const nextRetry = (s.retryCount || 0) + 1;
         const updateData = { retryCount: nextRetry, lastRetryAt: new Date() };
@@ -116,8 +123,8 @@ export async function dailyChargeAll() {
         continue;
       }
 
-      // debit wallet
-      await walletService.debit(s.userId, s.plan.pricePerDay, { reason: 'daily_subscription', subscriptionId: s.id });
+  // debit wallet
+  await walletService.debit(s.userId, planPrice, { reason: 'daily_subscription', subscriptionId: s.id });
 
       // update lastChargedAt and reset retry counters
       await prisma.subscription.update({ where: { id: s.id }, data: { lastChargedAt: new Date(), retryCount: 0, lastRetryAt: null } });
